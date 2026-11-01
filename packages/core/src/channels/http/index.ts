@@ -12,7 +12,8 @@
  */
 
 import type { DiscoveryReport, HttpSkin, LoginFlow } from "../../domain/discovery.js";
-import type { Entity, EntityEnvelope } from "../../domain/model.js";
+import { htmlToText } from "../../domain/html.js";
+import { isEntityKind, type Entity, type EntityEnvelope, type EntityKind } from "../../domain/model.js";
 import { saveAttachment } from "../attachments.js";
 import {
   ChannelError,
@@ -100,6 +101,97 @@ export function entityFromHref(href: string): { kind: "story" | "task" | "bug"; 
     if (Number.isFinite(id)) return { kind, id };
   }
   return undefined;
+}
+
+/** 新皮肤的搜索结果是前端拉 JSON 渲染的，HTML 只剩一个挂载点。 */
+function looksLikeScriptShell(html: string): boolean {
+  if (/id=["'](?:searchResult|zin_search_index_form)["']/i.test(html) === false) return false;
+  // 有结果链接就按页面解析走；一个链接都没有才判定为「壳」。
+  return /(?:story|task|bug)-view-\d+|m=(?:story|task|bug)(?:&|&amp;)f=view/i.test(html) === false;
+}
+
+/** 搜索 JSON 里的一条结果（只取本工具用得到的字段）。 */
+interface SearchJsonRow {
+  readonly objectType?: unknown;
+  readonly objectID?: unknown;
+  readonly title?: unknown;
+}
+
+/**
+ * 走禅道搜索接口（`t=json`）取结果。
+ *
+ * 这是唯一在新皮肤下站得住的路径：`m=search&f=index` 的 HTML 是前端渲染的空壳，
+ * 正则提链接必然命中 0 条，而 JSON 接口直接把 `results` 结构化返回。
+ * 返回 `undefined` 表示「这个部署没有 JSON 接口/格式不认识」，交回给调用方走 HTML 兜底。
+ *
+ * 分页参数只有 `recPerPage=10&pageID=N` 这一种组合生效（只给 `pageID` 会被忽略、
+ * 只给 `recPerPage` 也不生效），所以按需翻页时两个都必须显式带上。
+ */
+async function searchJson(
+  http: HttpSession,
+  keyword: string,
+  limit: number,
+  kind: EntityKind | undefined,
+  signal?: AbortSignal,
+): Promise<SearchHit[] | undefined> {
+  const perPage = 10;
+  const hits: SearchHit[] = [];
+  const seen = new Set<string>();
+  let pageTotal = 1;
+
+  for (let pageId = 1; pageId <= Math.min(pageTotal, 5); pageId += 1) {
+    // 参数顺序在这里是有意义的：禅道从 `recPerPage` 起才认 `pageID`，把 `type` 放在
+    // 它们之前会让 `pageID` 被忽略（实测回显 `pageID=10`），所以 `type` 必须排在最后。
+    const path =
+      `/index.php?m=search&f=index&t=json&recPerPage=${perPage}&pageID=${pageId}` +
+      `&type=all&words=${encodeURIComponent(keyword)}`;
+    const response = await http.get(path, signal);
+    const raw = response.html.trim();
+    if (pageId === 1 && !raw.startsWith("{")) return undefined;
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      if (pageId === 1) return undefined;
+      break;
+    }
+    const outer = payload as { status?: unknown; data?: unknown };
+    if (outer.status !== undefined && outer.status !== "success") return undefined;
+    let data: unknown = outer.data;
+    if (typeof data === "string") {
+      try {
+        data = JSON.parse(data);
+      } catch {
+        return undefined;
+      }
+    }
+    const body = data as { results?: unknown; pager?: { pageTotal?: unknown } } | undefined;
+    const results = body?.results;
+    if (results === undefined || results === null) return undefined;
+
+    const total = Number.parseInt(String(body?.pager?.pageTotal ?? ""), 10);
+    if (Number.isFinite(total) && total > 0) pageTotal = total;
+
+    // `results` 有时是数组，有时是以搜索命中 id 为键的对象，两种都认。
+    const rows: SearchJsonRow[] = Array.isArray(results)
+      ? (results as SearchJsonRow[])
+      : Object.values(results as Record<string, SearchJsonRow>);
+
+    for (const row of rows) {
+      const rowKind = row.objectType;
+      const id = Number.parseInt(String(row.objectID ?? ""), 10);
+      if (!isEntityKind(rowKind) || !Number.isFinite(id)) continue;
+      if (kind !== undefined && rowKind !== kind) continue;
+      const key = `${rowKind}#${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // 标题里的高亮是 `<span class='text-danger'>`，剔掉标签与实体才像人写的标题。
+      hits.push({ kind: rowKind, id, title: htmlToText(String(row.title ?? "")).slice(0, 160) });
+    }
+    if (hits.length >= limit) break;
+  }
+  return hits;
 }
 
 export function createHttpChannel(options: HttpChannelOptions): Channel {
@@ -296,6 +388,9 @@ export function createHttpChannel(options: HttpChannelOptions): Channel {
       if (!keyword) return [];
       const limit = Math.max(1, Math.min(request.limit, 50));
       try {
+        const json = await searchJson(http, keyword, limit, request.kind, request.signal);
+        if (json) return json.slice(0, limit);
+
         const response = await http.get(
           joinUrl(options.baseUrl, `/index.php?m=search&f=index&q=${encodeURIComponent(keyword)}`),
           request.signal,
@@ -314,6 +409,15 @@ export function createHttpChannel(options: HttpChannelOptions): Channel {
           seen.add(key);
           hits.push({ kind: target.kind, id: target.id, title: label.slice(0, 160) });
           if (hits.length >= limit) break;
+        }
+        if (hits.length === 0 && looksLikeScriptShell(response.html)) {
+          // 新皮肤的搜索页是前端渲染的空壳：HTML 里没有任何结果，硬解析只会得到「没有命中」，
+          // 那是假答案。宁可报错让上层降级，也不能静默给 0 条。
+          throw new ChannelError(
+            "http",
+            "search-unsupported",
+            `搜索页是前端渲染的（HTML 里没有结果列表），无法靠页面解析出「${keyword}」的结果；请用 DB 通道搜索。`,
+          );
         }
         return hits;
       } catch (error) {

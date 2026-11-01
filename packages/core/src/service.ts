@@ -726,7 +726,9 @@ function toLifeSaverError(
         ? "补齐对应通道设置（插件：设置页；MCP：ZENTAO_BASE_URL / ZENTAO_DB_HOST 等环境变量），密码填在凭据中心或环境变量。"
         : error.code === "not-found"
           ? "确认编号是否正确，或换 mode=http 用网页通道再试。"
-          : undefined;
+          : error.code === "search-unsupported"
+            ? "这个部署的搜索页是前端渲染的，网页通道搜不了；改用 DB 通道（把 mode 设为 db 或 auto，并配好只读库）。"
+            : undefined;
     // 降级链上每一条都要交代：只说「已尝试 db → http」等于没说为什么 db 不行。
     const suffix =
       tried.length > 1
