@@ -1,0 +1,30 @@
+# dsh-life-saver — 禅道内容全量提取
+#
+# 一个 cordis 行，名字 dsh-life-saver；行 id 为 life-saver。
+# 该 id 同时是：
+#   - cordis.patch.yml 里的行 id
+#   - ctx.settings 命名空间（设置页 / bridge 读写的就是这个 ns）
+#   - 插件页 row.config 的 slot key 前缀（dsh-life-saver#life-saver）
+# 三者必须一致，否则设置页读不到、bridge 写不进。
+#
+# 可在此处预置默认值，例如：
+#   mode: db
+#   http:
+#     baseUrl: http://zentao.example.com
+#     account: admin
+#   db:
+#     host: zentao.example.com
+#     port: 13306
+#     database: zentao
+#     user: root
+#   sftp:
+#     host: zentao.example.com
+#     port: 22
+#     user: root
+#     uploadBase: /home/zentao/zentao/www/data/upload
+# 密码不要写在这里，用凭据中心：ZENTAO_PASSWORD / ZENTAO_DB_PASSWORD / ZENTAO_SFTP_PASSWORD
+- insert:
+    - id: life-saver
+      name: dsh-life-saver
+      config:
+        mode: auto

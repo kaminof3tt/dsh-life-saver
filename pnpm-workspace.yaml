@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+
+# esbuild 的 postinstall 负责装平台二进制；不放行的话 build 时会报找不到 esbuild。
+# ssh2 / cpu-features 是可选原生加速，缺了走纯 JS 回退，这里一并放行省得每次告警。
+allowBuilds:
+  cpu-features: true
+  esbuild: true
+  ssh2: true
