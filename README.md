@@ -88,17 +88,17 @@ http://zentao.example.com/index.php?m=story&f=view&id=1389  （biz 版用通用 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `mode` | `auto` | `auto` / `db` / `http` |
-| `http.baseUrl` | `http://zentao.example.com` | 禅道地址，不要带 `/zentao` 之外的多余路径 |
-| `http.account` | 空 | 禅道登录名（本机环境是 `admin`，注意两个 h） |
+| `http.baseUrl` | 空 | 禅道根地址，例如 `http://zentao.example.com`；带不带 `/zentao` 后缀都行 |
+| `http.account` | 空 | 禅道登录名 |
 | `http.timeoutMs` | `60000` | 单次页面请求超时 |
 | `http.skin` | `auto` | 页面皮肤：`auto` / `detail-section`（禅道 15+/biz）/ `detail`（12.x）/ `article`。读不到正文时手工钉死比自动认更快 |
 | `db.keywords` | `auto` | 搜索是否匹配 `keywords` 列：`auto` / `on` / `off`。搜索报 SQL 错（老库没这列）时钉死 `off` |
-| `db.host` `db.port` | `zentao.example.com` `13306` | 只读库 |
-| `db.database` `db.user` `db.prefix` | `zentao` `root` `zt_` | 表前缀跟部署走 |
+| `db.host` `db.port` | 空 `3306` | 只读库 |
+| `db.database` `db.user` `db.prefix` | `zentao` 空 `zt_` | 表前缀跟部署走 |
 | `discovery.enabled` | `true` | 体检时自动探测结构（皮肤 / 登录算法 / 库列与关联表）。关掉 = 一律用默认结构 |
 | `discovery.ttlMs` | `600000` | 探测缓存时长；换库地址或站点地址会自动重探，`0` = 每次体检都重探 |
-| `sftp.host` `sftp.port` `sftp.user` | `zentao.example.com` `22` `root` | 附件实体 |
-| `sftp.uploadBase` | `/home/zentao/zentao/www/data/upload` | 禅道 upload 目录（**不带**产品号，插件自己扫 `upload/1/…`） |
+| `sftp.host` `sftp.port` `sftp.user` | 空 `22` 空 | 附件实体 |
+| `sftp.uploadBase` | 空 | 禅道 upload 目录绝对路径，例如 `/home/zentao/zentao/www/data/upload`（**不带**产品号，插件自己扫 `upload/1/…`） |
 | `limits.*` | 见源码 | 超时、并发、附件数量/大小上限 |
 | `output.dir` | 空 | 附件落盘目录；空则用 `<会话工作区>/zentao-extract/<kind>-<id>/`（取自会话 header 的 cwd，不是宿主进程 cwd） |
 | `targets` | `""` | 工作区目标表，JSON 数组字符串（页面里有可视化编辑器，一般不用手写），见下节 |
@@ -555,6 +555,33 @@ pnpm test       # pnpm -r：core 105 条 + 插件 89 条
 - `lib/client.js`：`window.__ModuleLoader__.load({ id, factory: (require) => … })`，只 `require` react 系列，其余全部打进来
 - `cordis.patch.yml`：`- insert:` 列表，行 id 决定配置页 key（`<包名>#<行 id>`）
 
+## 发布（GitHub Actions）
+
+两个 workflow 各管一段：
+
+| 文件 | 什么时候跑 | 干什么 |
+|---|---|---|
+| `.github/workflows/ci.yml` | 推到 `main`、每个 PR、手动 | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm lint` → `pnpm test`（194 条） |
+| `.github/workflows/release.yml` | 推 `v*` tag，或手动填版本号 | 改 manifest 版本 → 断言三个 manifest 一致 → 同一套构建与测试 → 先发 `life-saver-core`，确认能从 npm 查到之后再发 `dsh-life-saver` |
+
+几条硬约定：
+
+1. **版本号只有一个来源**：tag（或手动输入的 version）。manifest 由 `scripts/apply-version.mjs` 现场改，**不提交回仓**——所以 git 里的 `0.8.1` 与 npm 上的 `0.9.0` 允许差一行。
+2. **依赖靠 `workspace:*` 自动钉住**：`pnpm publish` 会把它改写成精确版本。已实测：打出来的 `dsh-life-saver-0.8.1.tgz` 里 `dependencies` 就是 `{"life-saver-core":"0.8.1"}`，不需要额外脚本。
+3. **先 core 后壳**：壳钉的是同版本 core，core 没上就是 `ETARGET`。所以发布步骤是「发 core → 轮询 `npm view` 直到查得到（最多 2 分钟）→ 发壳」。
+4. **幂等**：`npm view <name>@<ver>` 已经有值就跳过，失败路径绝不 `npm unpublish`。重跑同一个 tag 是安全的。
+5. **provenance**：`--provenance` 要 `id-token: write` 与 public 仓，npm 页上会显示「由这个 commit 构建」。
+6. **不需要跨仓凭证**：每个仓只用自己那一个 `NPM_TOKEN` secret。MCP 那个仓（`life-saver-mcp`）用「拉」的方式——它的 release 先断言 `npm view life-saver-core@<ver>` 有值，再发自己。
+
+本地干跑（不推 tag、不碰 npm）：
+
+```bash
+node scripts/apply-version.mjs 0.9.0     # 只改三个 manifest
+pnpm --filter life-saver-core pack       # 看 tarball 里到底有什么
+pnpm --filter dsh-life-saver pack        # 依赖是否已从 workspace:* 变成 0.9.0
+git checkout -- package.json packages/*/package.json   # 干跑完记得还原
+```
+
 ## 验证状态
 
 | 环节 | 怎么验的 | 结果 |
@@ -564,7 +591,7 @@ pnpm test       # pnpm -r：core 105 条 + 插件 89 条
 | 打包 | `pnpm --filter life-saver-core pack` 后在空目录 `npm i <tgz>` | 通过：包名导入、深层导入（`life-saver-core/channels/write.js`）、`.d.ts` 类型解析、配置 schema 都能用 |
 | 装进宿主 | junction 到 `~/.dsh/profiles/desktop/node_modules/dsh-life-saver`（→ `packages/plugin`）+ `cordis.patch.yml` 的 `- insert:` 行 | 重启后 `zentao_status`/`zentao_read`/`zentao_search` 出现在工具清单 |
 | 桥接协议 | 对 `http://127.0.0.1:<port>/api/dsh-life-saver/{test,credentials-status}` 发 POST | 200，返回真实 `mode`/`missing`/`probe` 与三把凭据状态 |
-| 只读库 + SFTP | 连内网真库（`zentao.example.com:13306`，库名 `zentao`）读实体并落盘附件 | 通过；期间修掉 `zt_story.project` 不存在与附件目录拼错两个真 bug |
+| 只读库 + SFTP | 连内网真库（`zentao.example.com:3306`，库名 `zentao`）读实体并落盘附件 | 通过；期间修掉 `zt_story.project` 不存在与附件目录拼错两个真 bug |
 | HTTP 页面 | 假禅道端到端（见 `test/http-e2e.test.mjs`） | 通过：登录换 cookie → `zin` 页面解析 → 附件落盘 → 会话失效重登 |
 | HTTP 真机 | 用真实账号登录后读 bug 5968 / task 2042 / story 1383 | 通过：标题、正文、备注、内嵌截图（按字节头补 `.png`）全部落位；期间修掉「登录要带第一步的会话 cookie」这个真 bug |
 | mode 切换 | 插件页切 `db`/`http`/`auto`，观察 `zentao_status` 的通道与 `数据源` 行 | 通过：切换后工具下一次调用即按新通道取数 |

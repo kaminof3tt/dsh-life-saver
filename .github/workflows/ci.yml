@@ -1,0 +1,42 @@
+name: ci
+
+# 每次推到 main 与每个 PR 都跑一遍：构建、类型检查、lint、194 个用例。
+# 发布走 release.yml，两者分开是为了 PR 不碰 npm 凭证。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm -r typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm test
