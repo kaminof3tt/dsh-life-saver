@@ -76,7 +76,7 @@ function callRoute(route, { method = "POST", headers = {}, body, raw } = {}) {
   });
 }
 
-test("宿主入口：注册七个工具、关掉自动表单、挂九条 bridge 路由", async () => {
+test("宿主入口：注册八个工具、关掉自动表单、挂九条 bridge 路由", async () => {
   const mod = await import(pathToFileURL(join(root, "lib", "index.js")).href);
   assert.equal(mod.name, "life-saver", "cordis 行名必须是 life-saver");
   assert.equal(typeof mod.apply, "function");
@@ -87,6 +87,7 @@ test("宿主入口：注册七个工具、关掉自动表单、挂九条 bridge 
   const names = tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [
     "zentao_bug_op",
+    "zentao_commit",
     "zentao_read",
     "zentao_search",
     "zentao_session_start",

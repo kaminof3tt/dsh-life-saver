@@ -12,6 +12,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import type { LifeSaverService } from "life-saver-core/service.js";
 import type { LauncherDeps } from "../session/launcher.js";
 import { createBugOpTool } from "./bugop.js";
+import { createCommitTool } from "./commit.js";
 import { createReadTool } from "./read.js";
 import { createSearchTool } from "./search.js";
 import { createSessionTool } from "./session.js";
@@ -31,6 +32,7 @@ export function registerTools(ctx: Context, service: LifeSaverService, host: Hos
     createWorkhoursTool(service),
     createTaskOpTool(service),
     createBugOpTool(service),
+    createCommitTool(service),
     createSessionTool(service, { ...host, origin: "agent" }),
   ];
   const disposers = definitions.map((definition) => ctx.tools.register(definition));

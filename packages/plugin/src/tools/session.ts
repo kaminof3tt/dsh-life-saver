@@ -15,6 +15,7 @@ import { LifeSaverError } from "life-saver-core/service.js";
 import { parseZentaoRef } from "life-saver-core/domain/link.js";
 import { asEntityKind, compact } from "life-saver-core/tools/shared.js";
 import { startSession, type LauncherDeps, type StartResult } from "../session/launcher.js";
+import { sessionIdOf } from "./context.js";
 
 function markdown(value: StartResult): string {
   const lines: string[] = [];
@@ -170,17 +171,4 @@ export function createSessionTool(service: LifeSaverService, deps: Omit<Launcher
       });
     },
   });
-}
-
-/**
- * 发起本次调用的会话 id：查旧会话时要排除它自己（否则模型可能让自己「继续」）。
- * `ToolRunContext` 的类型里没有这个字段，运行期才摸得到，所以宽松取。
- */
-function sessionIdOf(exec: { agent?: unknown }): string | undefined {
-  const agent = exec.agent as { id?: unknown; session?: { id?: unknown; header?: { id?: unknown } } } | undefined;
-  const candidates = [agent?.session?.id, agent?.session?.header?.id, agent?.id];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim() !== "") return candidate.trim();
-  }
-  return undefined;
 }

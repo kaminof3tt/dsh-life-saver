@@ -12,6 +12,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import type { LifeSaverConfig } from "life-saver-core/config.js";
 import type { LifeSaverService } from "life-saver-core/service.js";
 import { LifeSaverError } from "life-saver-core/service.js";
@@ -27,6 +28,7 @@ import {
 } from "../domain/targets.js";
 import { syncRepos, type RepoSync } from "./git.js";
 import { lookupSession, type LookupResult, type SessionSummaryLike } from "./history.js";
+import { recordWorkStart } from "../commit/start.js";
 
 /** 宿主工作区注册表：只声明用得上的方法。 */
 export interface WorkspaceRegistryLike {
@@ -313,6 +315,29 @@ export async function startSession(
     } catch (error) {
       deps.logger?.warn?.(`会话 ${sessionId} 改名失败：${messageOf(error)}`);
     }
+  }
+
+  // 6.5 开工记账：把会话与单子绑定，并记下开工那一刻的脏文件。之后 `zentao_commit`
+  // 才能分清「这轮新改的」和「开工前就脏着的」。记账失败只提示，不挡开工——
+  // 大不了提交流程退化成「必须显式给 files」。
+  try {
+    const recorded = await recordWorkStart({
+      repos: target.repos.map((repo) => ({
+        path: isAbsolute(repo.path) ? resolve(repo.path) : resolve(join(target.path, repo.path)),
+      })),
+      ticket: {
+        kind: request.kind,
+        id: request.id,
+        title: entity.title,
+        ...(entity.url !== undefined ? { url: entity.url } : {}),
+      },
+      sessionId,
+      overwriteBaseline: !reused,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    warnings.push(...recorded);
+  } catch (error) {
+    warnings.push(`开工现场没记上（不影响开工，只是提交时得自己给文件清单）：${messageOf(error)}`);
   }
 
   // 7. 首条提示词：显式给了就发，否则看配置。默认不发。

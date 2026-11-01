@@ -129,7 +129,7 @@ http://zentao.example.com/index.php?m=story&f=view&id=1389  （biz 版用通用 
 - 探测失败不会影响读：退回默认层照常工作，只是状态页会显式标出来。
 - 认错了才需要手工钉死：读实体报 `skin-unknown` → 配 `http.skin`；搜索报 SQL 错（老库没 `keywords` 列）→ 配 `db.keywords=off`。插件页「结构探测（自探索）」里有下拉框。
 
-## 七个工具
+## 八个工具
 
 ```
 zentao_read          ({ kind, id, scope?, download?, outDir?, includeRelated? })
@@ -138,6 +138,7 @@ zentao_status        ()
 zentao_workhours     ({ from, to, account?, kind?, detail?, limit? })
 zentao_task_op       ({ id, action, comment?, consumed?, left?, date?, realStarted?, finishedDate?, assignedTo?, expectStatus? })
 zentao_bug_op        ({ id, action, comment?, consumed?, date?, resolution?, resolvedBuild?, duplicateBug?, assignedTo?, expectStatus? })
+zentao_commit        ({ kind?, id?, repo?, files?, message?, dryRun?, push? })
 zentao_session_start ({ kind, id, targetId?, prompt?, dryRun?, cloneMissing?, update?, reuse? })
 ```
 
@@ -151,6 +152,7 @@ zentao_session_start ({ kind, id, targetId?, prompt?, dryRun?, cloneMissing?, up
 - `zentao_task_op`：改**任务**。`action` = `start` / `recordworkhour` / `finish` / `pause` / `activate` / `close` / `cancel` / `comment`。
 - `zentao_bug_op`：改**BUG**。`action` = `confirm`（确认）/ `resolve`（解决）/ `close`（关闭）/ `comment`（备注）/ `recordworkhour`（记日志工时）。
 - `zentao_session_start`：读完编号后在对应工作区**开一个新会话**去干活，见下节。
+- `zentao_commit`：把**本次对话改的文件**提交成一条带禅道单子信息的提交，见「提交代码（zentao_commit）」。
 
 ## 写入禅道（zentao_task_op / zentao_bug_op）
 
@@ -413,6 +415,50 @@ DB 线现在**和页面线功能等价**：父任务状态汇总、需求阶段�
 - **GUI 不会自动跳到新会话**。会话建好后会出现在左侧会话列表里（宿主会广播 `api-session/added`），点开即可。
 - 新会话不继承当前会话的文件策略/审批设置，用的是它自己工作区的那套。
 
+
+## 提交代码（zentao_commit）
+
+一句话：把**本次对话改的文件**提交成一条带禅道单子信息的提交，备注不用手写，
+也不会顺手把同一个工作区里别的会话、或者你自己开工前就改了一半的文件卷进来。
+
+```
+zentao_commit ({ kind?, id?, repo?, files?, message?, dryRun?, push? })
+```
+
+### 提交信息固定两行
+
+```text
+BUG #5967 附件上传失败
+http://192.0.2.10/index.php?m=bug&f=view&bugID=5967
+```
+
+第一行「类型 #编号 标题」、第二行禅道链接，都由工具从单子里取，不用手打（`message` 可以整段覆盖）。
+没显式给 `kind` + `id` 时，用这个会话开工时绑定的那张单子——也就是 `zentao_session_start` 记下的。
+
+### 只提交本次对话的改动
+
+三层保护，按可靠性从高到低：
+
+| 层 | 做法 | 挡什么 |
+|---|---|---|
+| 私有索引 | 每个会话一个 `GIT_INDEX_FILE`（`.git/life-saver/index-<会话>`），从 HEAD 起步、只 `git add` 自己的文件 | 别人 `git add` 进默认索引的东西不会进我的提交；也不会撞 `.git/index.lock` |
+| 开工基线 | 开工时记下 HEAD + 当时已脏的文件（`.git/life-saver/<会话>.json`），提交时只取**新出现**的改动 | 你开工前就改了一半的文件（列在 `heldBack` 里，单独显示，不提交） |
+| 事后对齐 | 提交后 `git reset -q HEAD -- <这些文件>` | 不给别人留「已暂存但内容过时」的条目 |
+
+**并行会话的诚实说明**：git 本身记不住「这个文件是谁改的」。所以在**同一个仓库里有另一个会话也开工过**时，
+默认的「开工后新出现的改动」可能把对方正在改的文件也算进来——工具会在 `warnings` 里明确提示，
+并且推荐用 `files` 精确指定。给了 `files` 就是精确的：只提交点名的文件。
+
+```text
+zentao_commit ({ dryRun: true })                    # 先看：会提交哪些、挡下了哪些
+zentao_commit ({ files: ["src/a.ts", "src/b.ts"] })  # 精确：只提交这两个
+```
+
+### 不做的事
+
+- **不 push**（除非 `push: true`）；不去 `fetch`、不切分支、不 stash，工作区里别人的改动一律不动。
+- 不做 cherry-pick、不碰子模块——那是改代码的活，得有人判断冲突。
+- 没有改动时直接报 `nothing-to-commit`，不会造空提交。
 
 ## 排障
 

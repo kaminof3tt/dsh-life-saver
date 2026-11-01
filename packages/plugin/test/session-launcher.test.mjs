@@ -141,7 +141,12 @@ test("显式 prompt：最后一步发提示词，正文原样、requestId 带前
     const sent = await startSession(h.deps, { kind: "bug", id: 5967, prompt: "自己看", cloneMissing: false });
     assert.equal(sent.ok, true, sent.message);
     assert.equal(sent.prompted, true, `提示词没发出去：${sent.warnings.join("; ")}`);
-    assert.deepEqual(sent.warnings, []);
+    // 假工作区里的目录不是 git 仓库，开工记账会如实说一句「没记基线」——这不算异常。
+    assert.deepEqual(
+      sent.warnings.filter((item) => !item.includes("没有记开工基线")),
+      [],
+      `不该有别的警告：${sent.warnings.join("; ")}`,
+    );
     const [name, request] = h.calls.at(-1);
     assert.equal(name, "session.prompt");
     assert.equal(request.content[0].text, "自己看");
