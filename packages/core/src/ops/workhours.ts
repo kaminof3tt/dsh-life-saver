@@ -34,12 +34,17 @@ function kindLabel(kind: string): string {
   return kind === "task" ? "任务" : kind === "bug" ? "BUG" : kind === "story" ? "需求" : kind;
 }
 
-/** 先把总账说清楚，再按对象、逐条、逐日，最后才是漏项与口径说明。 */
-export function renderWorklogReport(report: WorklogReport, detail: boolean): string {
+/**
+ * 先把总账说清楚，再按对象、逐条、逐日，最后才是漏项与口径说明。
+ *
+ * `groupCount` 是**截断前**的对象数：limit 会把 `report.groups` 切短，合计行不能跟着变少，
+ * 否则「涉及 5 个对象」与末尾「共 32 个对象，这里只展示了前 5 个」自相矛盾。
+ */
+export function renderWorklogReport(report: WorklogReport, detail: boolean, groupCount = report.groups.length): string {
   const lines: string[] = [];
   const scope = report.from === report.to ? report.from : `${report.from} ~ ${report.to}`;
   lines.push(`# ${report.account} 的工时（${scope}）`, "");
-  lines.push(`- 合计：**${report.total} 小时**，涉及 ${report.groups.length} 个对象、${report.entries.length} 条工时记录`);
+  lines.push(`- 合计：**${report.total} 小时**，涉及 ${groupCount} 个对象、${report.entries.length} 条工时记录`);
 
   if (report.groups.length > 0) {
     lines.push("", "## 做了什么", "");
@@ -118,7 +123,7 @@ export async function runWorkhoursTool(
     from: report.from,
     to: report.to,
     total: report.total,
-    markdown: renderWorklogReport(shown, args.detail === true),
+    markdown: renderWorklogReport(shown, args.detail === true, report.groups.length),
   };
 }
 
