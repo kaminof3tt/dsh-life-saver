@@ -223,3 +223,27 @@ test("files 里给了没改动的路径时报 not-dirty", async () => {
     (error) => error.code === "not-dirty",
   );
 });
+
+test("给了 repo 时，files 里的相对路径也按仓库根解析", async () => {
+  // 会话的工作目录通常不是仓库根（仓库在工作区下面一层，或者给的是另一个仓），
+  // 这时 "b.txt" 相对 cwd 找不到，但相对仓库根是明确的。
+  const repo = await makeRepo();
+  repos.push(repo);
+  await recordWorkStart({
+    repos: [{ path: repo }],
+    ticket: TICKET_WITH_URL,
+    sessionId: "s-root",
+    overwriteBaseline: true,
+  });
+  await writeFile(join(repo, "b.txt"), "b\n", "utf8");
+  const elsewhere = await mkdtemp(join(tmpdir(), "ls-cwd-"));
+  repos.push(elsewhere);
+
+  const out = await runCommit(
+    { kind: "bug", id: 5967, repoPath: repo, files: ["b.txt"] },
+    { service, cwd: elsewhere, sessionId: "s-root" },
+  );
+
+  assert.deepEqual(out.files, ["b.txt"]);
+  assert.deepEqual(filesInHead(repo), ["b.txt"]);
+});

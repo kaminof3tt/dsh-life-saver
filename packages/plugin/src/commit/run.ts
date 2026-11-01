@@ -148,14 +148,29 @@ async function lookupTicket(
   };
 }
 
-/** 把用户给的路径统一成仓库相对路径。 */
+/**
+ * 把用户给的路径统一成仓库相对路径。
+ *
+ * 相对路径有两种合理读法：相对会话的工作目录，或相对仓库根。传了 `repo` 之后这两者
+ * 常常不是同一个目录（仓库在父目录里、或是某个子目录），只认其中一种就会把正常路径
+ * 判成「不在仓库里」。所以先按工作目录解，落不进仓库再按仓库根解。
+ */
 function toRepoPath(root: string, cwd: string, input: string): string {
-  const absolute = isAbsolute(input) ? input : resolve(cwd, input);
-  const rel = relative(root, absolute).replace(/\\/g, "/");
-  if (rel === "" || rel.startsWith("../") || rel === "..") {
-    throw new LifeSaverError("bad-args", `\`${input}\` 不在仓库 \`${root}\` 里，不能提交。`);
+  const inside = (absolute: string): string | undefined => {
+    const rel = relative(root, absolute).replace(/\\/g, "/");
+    if (rel === "" || rel.startsWith("../") || rel === "..") return undefined;
+    return rel;
+  };
+  if (isAbsolute(input)) {
+    const rel = inside(input);
+    if (rel === undefined) throw new LifeSaverError("bad-args", `\`${input}\` 不在仓库 \`${root}\` 里，不能提交。`);
+    return rel;
   }
-  return rel;
+  const fromCwd = inside(resolve(cwd, input));
+  if (fromCwd !== undefined) return fromCwd;
+  const fromRoot = inside(resolve(root, input));
+  if (fromRoot !== undefined) return fromRoot;
+  throw new LifeSaverError("bad-args", `\`${input}\` 不在仓库 \`${root}\` 里，不能提交。`);
 }
 
 /** 主流程。 */
