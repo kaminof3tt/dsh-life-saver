@@ -415,6 +415,12 @@ test("父子模块：提示词里交代子模块跟着父仓库同一条链走",
     assert.ok(dry.prompt.includes("子模块"), "提示词里应提到子模块");
     assert.ok(dry.prompt.includes("1 个子模块"), `仓库行应带子模块数量：\n${dry.prompt}`);
     assert.ok(dry.prompt.includes("同一条链"), "应说明子模块跟父仓库同一条链");
+    // 只改子模块时，父仓库没有自己的代码要搬，不该被要求 cherry-pick，只需更新指针。
+    assert.ok(
+      dry.prompt.includes("只改了子模块、父仓库自身没有代码改动"),
+      `应交代「只改子模块时父仓库不 cherry-pick、只更新指针」：\n${dry.prompt}`,
+    );
+    assert.ok(dry.prompt.includes("父仓库不要 cherry-pick"), `应明确父仓库不要 cp：\n${dry.prompt}`);
   } finally {
     await h.cleanup();
   }
