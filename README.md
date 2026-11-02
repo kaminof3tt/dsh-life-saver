@@ -371,8 +371,11 @@ DB 线现在**和页面线功能等价**：父任务状态汇总、需求阶段�
 1. `workspaceRegistry.list()` 里按路径找已登记的工作区（大小写、斜杠方向都归一化过），有就复用，没有才 `create(path, name)`；
 2. 同一编号在这个工作区里已有会话时**直接回到它**（`sessionController.list()` 只读扫标题，见下一节），不建新的；
 3. 否则 `sessionController.create({ workspaceId })` 建会话——注意宿主规定 `workspaceId` 和 `cwd` **只能给一个**；
-4. `sessionTitle.rename` 把标题写成 `BUG #5967 登录页点不动`（≤80 字，失败只警告不影响开工；复用旧会话时不改名）；
-5. 需要时才发开场提示词。
+4. 需要时才发开场提示词；
+5. **首条提示词真的发出去了**才 `sessionTitle.rename` 把标题写成 `BUG #5967 登录页点不动`（≤80 字，失败只警告不影响开工；复用旧会话时不改名）。
+   没发提示词就**不写标题**：宿主点「新建会话」会复用本工作区里最新的 blank 会话（blank 只看有没有 `turn/start`），
+   一个「改过名但从没说过话」的空壳会被反复复用，把旧标题一路带到后面的新会话上（宿主又没有清空标题的接口，空串判非法）。
+   11-01 那次攒出来的 7 个「BUG #5967」空壳就是这么来的。
 
 默认提示词会告诉新会话：先用 `zentao_read` 把编号内容读全、动手前确认自己在对的分支、**不要 `git push`**，
 并把每个仓库的角色/路径/分支链/子模块数/当前状态列一遍。要改就在配置里写 `session.promptTemplate`（占位符多了 `{{branches}}`、`{{submodules}}`、`{{submodulebranches}}`）。
@@ -592,7 +595,7 @@ pnpm test       # pnpm -r：core 105 条 + 插件 89 条
 - `test/normalize.test.mjs`：两条通道的口径归一——页面 `status-xxx` class 变机器码、人员中文名反查回账号、反查不到就不伪造、中文/机器码互转字典（含旧文案「结束」）、`userPairs` 两层 JSON 解析与坏回包、页面内联样式表不能被当成状态数据
 - `test/http-payload.test.mjs`：HTTP 写的表单载荷与表单默认值回填（离线断言，因为这条线没有沙箱）——`readFormDefaults` 要从页面里读出 `status/assignedTo/type/pri/deadline` 这类控件当前值（正是 `bug confirm` 被打坏的那几列），`uid` 与 JS 拼串占位值、附件控件不回填；`recordworkhour` 必须带数组下标、`finish` 的 `currentConsumed` 与 `consumed` 两个都给、`close` 不带 status、`activate` 必须给 left、BUG 日志四个数组字段齐全、`resolve` 的 fixed/duplicate 必填项
 - `test/git-submodule.test.mjs`：父子模块仓库真建临时 git 仓库来跑——子模块指针漂移不算父仓库脏、脏的子模块原样不动只报告、干净的子模块跟着父仓库快进、游离头没单独配分支时跟随父仓库分支、配了分支就切过去、配的分支不存在则原样不动并提示改配置、单仓库不多出子模块字段
-- `test/session-launcher.test.mjs`：开新会话的调用契约——dryRun 不建会话、`create → session.create → session.rename` 顺序固定、`session.create` 只给 `workspaceId`、`session.prompt` 的第二个参数（signal）不能是 undefined、agent 自主调用受 `agentAutoStart` 约束、匹配不上只列候选、同路径工作区复用不重建；以及「同编号回旧会话」的六种判定（回到旧会话且不建不改名、别的目录不接管、标题改过仍认而 `#59670` 不认、规范前缀优先且取最新、开关关掉就新建、排除自己）；还有分支链进提示词的两条（序号清单只列配了分支的仓库、没配就整段不出现）；以及父子模块进提示词（有父子模块说明、子模块数量、同一条链的 cherry-pick 交代）
+- `test/session-launcher.test.mjs`：开新会话的调用契约——dryRun 不建会话、没发提示词就不改名（`create → session.create`）、发了提示词则 `create → session.create → session.prompt → session.rename` 顺序固定、`session.create` 只给 `workspaceId`、`session.prompt` 的第二个参数（signal）不能是 undefined、agent 自主调用受 `agentAutoStart` 约束、匹配不上只列候选、同路径工作区复用不重建；以及「同编号回旧会话」的六种判定（回到旧会话且不建不改名、别的目录不接管、标题改过仍认而 `#59670` 不认、规范前缀优先且取最新、开关关掉就新建、排除自己）；还有分支链进提示词的两条（序号清单只列配了分支的仓库、没配就整段不出现）；以及父子模块进提示词（有父子模块说明、子模块数量、同一条链的 cherry-pick 交代）
 - `test/targets.test.mjs`：目标表解析——`branches` 有序且 `[0]` 就是改动落点、老写法 `branch` 折成单元素链、两者同时出现以 `branches` 为准、重复分支去重保序、没配分支不瞎猜、链里混了非字符串丢坏值保好值；子模块分支的键值对/数组两种写法、值的三种形态（单分支/逗号链/数组）、模糊匹配（全路径/末尾/任意一段/子串，多命中取键最长）、没配时不报错
 
 产物形状由 DSH 决定，别自己发明：

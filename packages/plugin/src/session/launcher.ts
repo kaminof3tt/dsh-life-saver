@@ -119,7 +119,7 @@ export function describeTargets(config: LifeSaverConfig): readonly WorkspaceTarg
 }
 
 /**
- * 开工：定位工作区 → 同步仓库 → 建/复用工作区 → 开新会话 → 改名 →（按配置）发提示词。
+ * 开工：定位工作区 → 同步仓库 → 建/复用工作区 → 开新会话 →（按配置）发首条提示词 → 发出去了才改名。
  *
  * 每一步失败都返回 `ok:false` 而不是抛错，好让模型把原因原样说给人听；
  * 只有参数级错误（编号不认识）才走 `LifeSaverError`。
@@ -273,7 +273,8 @@ export async function startSession(
   const warnings = [...sync.warnings];
   let workspace: WorkspaceLike;
   let sessionId: string;
-  let finalTitle = title;
+  // 新会话一开始不带标题：标题等首条提示词真发出去之后再写（理由见第 6 步）。
+  let finalTitle = "";
   let reused = false;
 
   if (previous !== undefined) {
@@ -308,13 +309,10 @@ export async function startSession(
       };
     }
 
-    // 6. 改标题。失败不算致命：会话已经在侧栏里了，标题之后能改。
-    try {
-      const renamed = await sessionController.rename?.({ sessionId, title });
-      if (renamed?.title !== undefined) finalTitle = renamed.title;
-    } catch (error) {
-      deps.logger?.warn?.(`会话 ${sessionId} 改名失败：${messageOf(error)}`);
-    }
+    // 6. 先不改名，标题留空。宿主「新建会话」会复用本工作区里最新的 blank 会话，
+    // 而 blank 只看有没有 turn/start —— 一个「改过名但从没说过话」的空壳会被反复复用，
+    // 新会话就一直顶着别人的标题；宿主又没有清空标题的接口（空串判非法）。
+    // 所以标题推迟到第 7.5 步：首条提示词真的发出去了再写。
   }
 
   // 6.5 开工记账：把会话与单子绑定，并记下开工那一刻的脏文件。之后 `zentao_commit`
@@ -365,14 +363,26 @@ export async function startSession(
     }
   }
 
+  // 7.5 提示词发出去了，会话才算真的开张：这时候再写标题，它就不再是 blank 空壳，
+  // 也就不会被宿主的「新建会话」反复复用、把标题带到下一个新会话上。
+  // 改名失败不算致命：会话已经能用，标题后面能自己改。
+  if (prompted && !reused) {
+    try {
+      const renamed = await sessionController.rename?.({ sessionId, title });
+      if (renamed?.title !== undefined) finalTitle = renamed.title;
+    } catch (error) {
+      warnings.push(`会话已建好，但标题没写上（${messageOf(error)}）；可以手动改，不影响干活。`);
+    }
+  }
+
   const where = workspace.title !== "" ? workspace.title : target.name;
   const message = reused
     ? prompted
       ? `回到工作区「${where}」里同编号的旧会话，并把首条提示词发了出去。`
       : `回到工作区「${where}」里同编号的旧会话「${finalTitle}」（没发提示词，去会话里接着干）。`
     : prompted
-      ? `已在工作区「${where}」开好会话并发了首条提示词。`
-      : `已在工作区「${where}」开好会话（提示词没发，去会话里确认后自己发）。`;
+      ? `已在工作区「${where}」开好会话并发了首条提示词${finalTitle !== "" ? `，标题「${finalTitle}」` : ""}。`
+      : `已在工作区「${where}」开好会话（提示词没发，标题先空着——免得留下「有标题但没内容」的空壳被反复复用；去会话里确认后自己发）。`;
 
   return {
     ok: true,
@@ -380,7 +390,7 @@ export async function startSession(
     target: briefTarget(target),
     workspace: { id: workspace.id, path: workspace.path, created: existing === undefined && !reused },
     sessionId,
-    title: finalTitle,
+    ...(finalTitle !== "" ? { title: finalTitle } : {}),
     reused,
     prompted,
     dryRun: false,

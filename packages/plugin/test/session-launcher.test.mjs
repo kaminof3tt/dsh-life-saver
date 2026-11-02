@@ -4,7 +4,7 @@
  *   node --test test/session-launcher.test.mjs
  *
  * 用假的 workspaceRegistry / sessionController 替身，确认：
- * 目标匹配、dryRun 不建会话、建会话→改名→发提示词的调用顺序、
+ * 目标匹配、dryRun 不建会话、建会话→发提示词→（发出去了才）改名的调用顺序、
  * session.create 只给 workspaceId、agent 自主调用受开关约束、匹配不上列候选、
  * 已登记同路径工作区直接复用。
  *
@@ -114,7 +114,7 @@ test("干跑：只探测不建会话，并把 zentao_read 指引写进提示词"
   }
 });
 
-test("真开工：建工作区 → 建会话 → 改名，顺序固定且只给 workspaceId", async () => {
+test("真开工（没发提示词）：只建工作区与会话，不给空会话改名", async () => {
   const h = await harness();
   try {
     const real = await startSession(h.deps, { kind: "bug", id: 5967, cloneMissing: false });
@@ -124,12 +124,32 @@ test("真开工：建工作区 → 建会话 → 改名，顺序固定且只给 
     const writes = h.calls.filter(([name]) => name !== "session.list");
     assert.deepEqual(
       writes.map(([name]) => name),
-      ["create", "session.create", "session.rename"],
-      `调用顺序不对：${JSON.stringify(writes.map(([n]) => n))}`,
+      ["create", "session.create"],
+      `提示词没发就别改名（会留下带标题的 blank 空壳被宿主反复复用）：${JSON.stringify(writes.map(([n]) => n))}`,
     );
     assert.deepEqual(writes[1][1], { workspaceId: "ws-1" }, "session.create 只能给 workspaceId，不能带 cwd");
+    assert.equal(real.title, undefined, "没发提示词就不该有标题");
+    assert.ok(real.message.includes("标题先空着"), `应说清标题为什么空着：${real.message}`);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("真开工并发了提示词：先发提示词再改名，标题收口在 80 字内", async () => {
+  const h = await harness();
+  try {
+    const real = await startSession(h.deps, { kind: "bug", id: 5967, prompt: "自己看", cloneMissing: false });
+    assert.equal(real.ok, true, real.message);
+    assert.equal(real.sessionId, "session-abc");
+    assert.equal(real.prompted, true, `提示词没发出去：${real.warnings.join("; ")}`);
+    const writes = h.calls.filter(([name]) => name !== "session.list");
+    assert.deepEqual(
+      writes.map(([name]) => name),
+      ["create", "session.create", "session.prompt", "session.rename"],
+      `改名必须排在提示词之后：${JSON.stringify(writes.map(([n]) => n))}`,
+    );
     assert.equal(real.title.startsWith("BUG #5967"), true, `标题不对：${real.title}`);
-    assert.ok(writes[2][1].title.length <= 80, "标题不该超过 80 字");
+    assert.ok(writes[3][1].title.length <= 80, "标题不该超过 80 字");
   } finally {
     await h.cleanup();
   }
@@ -147,7 +167,8 @@ test("显式 prompt：最后一步发提示词，正文原样、requestId 带前
       [],
       `不该有别的警告：${sent.warnings.join("; ")}`,
     );
-    const [name, request] = h.calls.at(-1);
+    // 改名排在提示词之后，所以这里找最后一条 prompt 调用。
+    const [name, request] = h.calls.filter(([called]) => called === "session.prompt").at(-1);
     assert.equal(name, "session.prompt");
     assert.equal(request.content[0].text, "自己看");
     assert.ok(request.requestId.startsWith("life-saver-bug-5967-"), `requestId 不对：${request.requestId}`);
