@@ -401,3 +401,57 @@ test("回归：工作区里配了仓库时，分支与子模块规则跟着仓�
     configSet !== undefined && (configSet.body.ops ?? []).some((op) => JSON.stringify(op.path).includes("targets"));
   assert.ok(!touchedTargets, `没改任何东西却提交了 targets：${JSON.stringify(configSet && configSet.body)}`);
 });
+
+/**
+ * 回归：页面加完分支点保存，targets 必须以**字符串**提交。
+ *
+ * 配置 schema 里 targets 是 `Schema.string()`（存 JSON 文本），桥接的 config-set
+ * 只收标量。之前客户端把草稿 JSON.parse 成数组塞进 op.value，宿主原话回
+ * 「配置项 targets 只接受标量」，加完分支永远保存不上。
+ */
+test("回归：加完分支保存时，targets 以 JSON 字符串提交", async () => {
+  const { loaded, react } = await loadClient();
+  const Page = mountPage(loaded);
+  const state = {
+    status: "ready",
+    writable: true,
+    revision: 7,
+    value: {
+      targets: [
+        {
+          id: "demo-v2",
+          name: "园区V2",
+          path: "D:\workspace\demo-v2",
+          zentaoProjects: ["园区物管"],
+          repos: [
+            { role: "server", path: "server", gitUrl: "git@example.com:park/server.git", branches: ["develop/v2.6"] },
+          ],
+        },
+      ],
+    },
+  };
+  const form = { state, mutate: async () => true };
+  let tree = render(react, Page, { view: "page", form });
+
+  const branchInput = findAll(tree, (node) => node.type === "input" && node.props.value === "develop/v2.6")[0];
+  assert.ok(branchInput, `找不到分支输入框；输入框值=${JSON.stringify(findAll(tree, (n) => n.type === "input").map((n) => n.props.value).filter(Boolean))}`);
+  branchInput.props.onChange({ target: { value: "develop/v2.6.3" } });
+
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : undefined });
+    return { ok: true, status: 200, async json() { return { ok: true, value: { revision: 8 } }; } };
+  };
+  const saved = rerender(react, Page, { view: "page", form });
+  const saveButton = findAll(saved, (node) => node.type === "button" && (node.children ?? []).includes("保存")).pop();
+  assert.ok(saveButton, "找不到保存按钮");
+  await saveButton.props.onClick();
+
+  const configSet = requests.find((item) => item.url.endsWith("/config-set"));
+  assert.ok(configSet, `改动没有提交；页面文案=${textOf(saved)}`);
+  const op = (configSet.body.ops ?? []).find((item) => JSON.stringify(item.path).includes("targets"));
+  assert.ok(op, `提交里没有 targets：${JSON.stringify(configSet.body)}`);
+  assert.equal(typeof op.value, "string", `targets 必须以字符串提交，实际是 ${typeof op.value}`);
+  const parsed = JSON.parse(op.value);
+  assert.equal(parsed[0].repos[0].branches[0], "develop/v2.6.3", "改过的分支没进提交内容");
+});

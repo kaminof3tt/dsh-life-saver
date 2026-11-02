@@ -263,6 +263,35 @@ function errorText(error) {
   return String(error);
 }
 
+/**
+ * 把「配置里的值 / 草稿里的文本」归一成可比的 JSON 文本。
+ *
+ * 为什么要归一：配置里 targets 存的是字符串，宿主快照有时给数组，
+ * 草稿里的空格又和存下来的形状未必一样（`{"a": 1}` vs `{"a":1}`）。
+ * 不归一的话，什么都没改也会被判成「改过」，一按保存就白提交一次。
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function canonicalJson(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text === "") return "";
+    try {
+      return JSON.stringify(JSON.parse(text));
+    } catch {
+      // 坏 JSON 原样返回：交给调用方判「不相等 / 不提交」，别在这里静默吞掉。
+      return text;
+    }
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 function getIn(source, path) {
   let cursor = source;
   for (const segment of path) {
@@ -298,16 +327,22 @@ function diffOps(draft, current) {
       continue;
     }
     if (field.kind === "json") {
-      // 草稿里是字符串、配置里是数组/对象，直接 === 比永远不等：
-      // 结果就是「什么都没改，一保存也把工作区目标表当成改动提交一遍」。
-      const beforeText =
-        before === undefined || before === null ? "" : typeof before === "string" ? before : JSON.stringify(before);
-      if (after === beforeText) continue;
+      // 这一项在配置里存的就是**字符串**（schema 是 `Schema.string()`，见 core/config.ts）。
+      // 桥接的 config-set 只收标量，把 JSON.parse 出来的数组塞进 op.value 会被拒，
+      // 页面上的原话就是「配置项 targets 只接受标量」——加完分支一保存就失败正是这个。
+      // 所以两边都归一成紧凑 JSON 文本再比，提交的也是文本。
+      const afterText = canonicalJson(after);
+      // 空草稿 = 没配：别拿空串去把已存的表顶掉。
+      if (afterText === "") continue;
+      if (afterText === canonicalJson(before)) continue;
       try {
-        ops.push({ op: "set", path: field.path, value: typeof after === "string" ? JSON.parse(after) : after });
+        const parsed = JSON.parse(afterText);
+        if (parsed === null || typeof parsed !== "object") continue;
       } catch {
         // 草稿里的 JSON 已经坏了：不提交，等用户在页面上改对。
+        continue;
       }
+      ops.push({ op: "set", path: field.path, value: afterText });
       continue;
     }
     if (after === before) continue;
@@ -365,12 +400,17 @@ function valueFromDraft(draft) {
       if (!Number.isFinite(parsed)) continue;
     }
     if (field.kind === "json") {
-      // 草稿里是字符串，写回配置时必须还原成对象/数组，否则 schema 校验会拒收。
+      // 配置里这一项是**字符串**（schema 是 `Schema.string()`）。以前这里 JSON.parse
+      // 成数组写回去，schema 校验直接拒收；桥接那边也会以「只接受标量」拒。
+      // 所以写回的就是规范化后的 JSON 文本，不是对象。
+      const text = canonicalJson(raw);
+      if (text === "") continue;
       try {
-        parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        JSON.parse(text);
       } catch {
         continue;
       }
+      parsed = text;
     }
     let cursor = value;
     for (const segment of field.path.slice(0, -1)) {
