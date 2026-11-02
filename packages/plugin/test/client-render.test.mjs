@@ -421,7 +421,7 @@ test("回归：加完分支保存时，targets 以 JSON 字符串提交", async 
         {
           id: "demo-v2",
           name: "园区V2",
-          path: "D:\workspace\demo-v2",
+          path: "D:\\workspace\\demo-v2",
           zentaoProjects: ["园区物管"],
           repos: [
             { role: "server", path: "server", gitUrl: "git@example.com:park/server.git", branches: ["develop/v2.6"] },
