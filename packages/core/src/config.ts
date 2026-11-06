@@ -180,7 +180,7 @@ export const Config = Schema.object({
     promptTemplate: Schema.string()
       .default("")
       .description(
-        "首条提示词模板。留空用内置模板。可用占位符：{{kind}} {{id}} {{title}} {{target}} {{repos}} {{branches}} {{submodules}} {{submodulebranches}} {{zentao}}。",
+        "首条提示词模板。留空用内置模板。可用占位符：{{kind}} {{id}} {{title}} {{target}} {{dir}} {{repos}} {{branches}} {{submodules}} {{submodulebranches}} {{zentao}}。{{dir}} 是工作区根目录下与会话同名的产物目录（按需创建，不是开局必须建的）。",
       )
       .volatile(),
     reuseExisting: Schema.boolean()

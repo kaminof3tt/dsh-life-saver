@@ -105,7 +105,7 @@ http://zentao.example.com/index.php?m=story&f=view&id=1389  （biz 版用通用 
 | `session.enabled` | `true` | 总开关；关了就完全不能用「开新会话」 |
 | `session.agentAutoStart` | `false` | 允许 Agent 自己调 `zentao_session_start`。默认关：只有人在页面上点按钮才会开 |
 | `session.autoPrompt` | `false` | 建好会话后是否自动把开场提示词发出去（发出去就是一轮真 LLM 调用，会计费） |
-| `session.promptTemplate` | 空 | 自定义开场提示词，占位符 `{{kind}} {{id}} {{title}} {{target}} {{repos}} {{branches}} {{zentao}}`；空则用内置模板 |
+| `session.promptTemplate` | 空 | 自定义开场提示词，占位符 `{{kind}} {{id}} {{title}} {{target}} {{dir}} {{repos}} {{branches}} {{submodules}} {{submodulebranches}} {{zentao}}`；空则用内置模板 |
 | `session.reuseExisting` | `true` | 同一编号之前开过会话时，回到那个旧会话继续，而不是新建。只认编号（标题里的 `#编号`），不看标题是否改过；同编号不在这个工作区就照常新建 |
 | `write.enabled` | `true` | 写能力总开关。关掉 = 插件完全只读，`zentao_task_op`/`zentao_bug_op` 直接拒绝 |
 | `write.mode` | `http` | `http`（走禅道表单页，推荐）/ `db`（直接改库）/ `auto`（先页面，通道不可用时降级到库） |
@@ -380,6 +380,11 @@ DB 线现在**和页面线功能等价**：父任务状态汇总、需求阶段�
 默认提示词会告诉新会话：先用 `zentao_read` 把编号内容读全、动手前确认自己在对的分支、**不要 `git push`**，
 并把每个仓库的角色/路径/分支链/子模块数/当前状态列一遍。要改就在配置里写 `session.promptTemplate`（占位符多了 `{{branches}}`、`{{submodules}}`、`{{submodulebranches}}`）。
 
+还会交代**会话产物目录**：**按需创建**——只有真要落文件（脚本、日志、导出数据、截图、临时笔记）时才在工作区根目录建一个和会话名同名的文件夹
+（`BUG #5967 登录页点不动`，`\ / : * ? " < > |` 换成 `-`、去掉末尾的点和空格，因为 Windows 不认）；
+一个文件都不用落就别建，免得工作区里堆一堆空文件夹。真落了文件就都放进去，不要塞进仓库、也不要散落在工作区根目录；
+代码本身的修改照旧落在对应仓库里。自定义模板用 `{{dir}}` 取这个目录的绝对路径。
+
 ### 同一编号：回到旧会话
 
 同一条单子第二次开工（比如 BUG 提了复测、任务追加了需求），**不新建会话，而是回到之前的那个**，
@@ -553,6 +558,8 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 写工具动作白名单、客户端字段表与配置 schema 对齐）。顺手修掉两个真问题：配置只读时「开新会话/试运行」按钮
 照样可点（`SessionPanel` 解构了 `disabled` 却没用）；`json` 类字段（工作区目标表）存进去是数组、草稿里是字符串，
 不做归一化会「什么都没改也提交一次回写」。
+同一版还改了开场提示词：要求新会话先在工作区根目录建一个和会话名同名的文件夹，这次产生的文件都放进去
+（会话名里的非法字符换 `-`，目录绝对路径既写进默认模板、也作为 `{{dir}}` 给自定义模板用）。
 
 
 ## 开发
@@ -636,7 +643,7 @@ git checkout -- package.json packages/*/package.json   # 干跑完记得还原
 | 环节 | 怎么验的 | 结果 |
 |---|---|---|
 | 构建 / 类型 / 风格 | `pnpm build`、`pnpm -r typecheck`、`pnpm lint` | 全部通过：core 出 `lib/*.js` + `*.d.ts`，插件出宿主 ESM 与客户端 bundle |
-| 测试 | `pnpm test` | 194 条全绿（core 105 / 插件 89） |
+| 测试 | `pnpm test` | 218 条全绿（core 114 / 插件 104） |
 | 打包 | `pnpm --filter life-saver-core pack` 后在空目录 `npm i <tgz>` | 通过：包名导入、深层导入（`life-saver-core/channels/write.js`）、`.d.ts` 类型解析、配置 schema 都能用 |
 | 装进宿主 | junction 到 `~/.dsh/profiles/desktop/node_modules/dsh-life-saver`（→ `packages/plugin`）+ `cordis.patch.yml` 的 `- insert:` 行 | 重启后 `zentao_status`/`zentao_read`/`zentao_search` 出现在工具清单 |
 | 桥接协议 | 对 `http://127.0.0.1:<port>/api/dsh-life-saver/{test,credentials-status}` 发 POST | 200，返回真实 `mode`/`missing`/`probe` 与三把凭据状态 |

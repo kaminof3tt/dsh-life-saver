@@ -442,6 +442,21 @@ function sessionTitle(target: WorkspaceTarget, kind: EntityKind, id: number, tit
 }
 
 /**
+ * 会话产物目录名：和会话名一致，只把文件系统不认的字符换掉。
+ *
+ * 会话名里带 `#`、空格、中文都是常态，Windows 只拦 `\ / : * ? " < > |` 与控制字符；
+ * 末尾的点和空格在 Windows 上会被静默吞掉，一并去掉，否则提示词里写的路径和实际建出来的不是同一个。
+ */
+function artifactDirName(sessionName: string): string {
+  const cleaned = sessionName
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/[\u0000-\u001f]/g, "-")
+    .replace(/[. ]+$/, "")
+    .trim();
+  return cleaned === "" ? "session" : cleaned;
+}
+
+/**
  * 首条提示词：只给「编号 + 环境事实 + 该做什么」。
  *
  * 刻意不把正文塞进来——正文模型自己会用 zentao_read 再读一遍，
@@ -466,6 +481,9 @@ function buildPrompt(
   const subChainText = submoduleChainText(target);
   const zentao = url !== undefined ? url : `禅道 ${kindLabel(kind)} #${id}`;
   const submoduleSummary = submoduleText(repos);
+  // 会话名与产物目录名同源：会话改名成 `BUG #5967 登录页报错`，产物目录就是工作区根目录下同名的那一个。
+  const sessionName = sessionTitle(target, kind, id, title);
+  const artifactDir = join(target.path, artifactDirName(sessionName));
   const custom = config.session.promptTemplate.trim();
   if (custom !== "") {
     return fill(custom, {
@@ -473,6 +491,7 @@ function buildPrompt(
       id: String(id),
       title,
       target: target.name,
+      dir: artifactDir,
       repos: reposText,
       branches: chainText === "" ? "（没配分支链）" : chainText,
       submodulebranches: subChainText === "" ? "（子模块都跟随父仓库分支）" : subChainText,
@@ -484,6 +503,8 @@ function buildPrompt(
     `处理${kindLabel(kind)} #${id}：${title}`,
     "",
     `工作区：${target.name}（${target.path}）`,
+    `会话产物目录（按需创建）：${artifactDir}`,
+    `这个目录不是开局任务，别先建：只有真要落文件（脚本、日志、导出的数据、截图、临时笔记）时才在工作区根目录建它（名字和会话名「${sessionName}」一致，已存在就直接用），文件都放里面；一个文件都不用落就别建，免得工作区里堆一堆空文件夹。别把文件塞进仓库、也别散落在工作区根目录。代码本身的修改照旧落在对应仓库里，不要挪进这个目录。`,
     "仓库状态（已开工前同步）：",
     reposText,
     "",

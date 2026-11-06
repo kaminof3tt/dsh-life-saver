@@ -114,6 +114,35 @@ test("干跑：只探测不建会话，并把 zentao_read 指引写进提示词"
   }
 });
 
+test("产物目录：按需创建，不是开局第一步，免得好多空文件夹", async () => {
+  const h = await harness();
+  try {
+    const dry = await startSession(h.deps, { kind: "bug", id: 5967, dryRun: true, cloneMissing: false });
+    assert.equal(dry.ok, true, dry.message);
+    // 会话名 = `BUG #5967 登录页报错`，`#` 合法、路径分隔符等才换掉，所以目录名原样保留。
+    const expected = join(h.root, "BUG #5967 登录页报错");
+    assert.ok(dry.prompt.includes(`会话产物目录（按需创建）：${expected}`), `提示词里应给出产物目录绝对路径：\n${dry.prompt}`);
+    assert.ok(dry.prompt.includes("别先建"), `应明确说不要开局就建：\n${dry.prompt}`);
+    assert.ok(dry.prompt.includes("一个文件都不用落就别建"), `应说明没文件就不建：\n${dry.prompt}`);
+    assert.ok(dry.prompt.includes("文件都放里面"), `应要求产物都放进这个目录：\n${dry.prompt}`);
+    assert.ok(!dry.prompt.includes("第一步在工作区根目录建出这个文件夹"), `不该再把建目录写成第一步：\n${dry.prompt}`);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("自定义模板：{{dir}} 渲染成产物目录绝对路径", async () => {
+  const h = await harness();
+  try {
+    h.config.session.promptTemplate = "产物放 {{dir}}，单子 {{kind}} #{{id}}";
+    const dry = await startSession(h.deps, { kind: "bug", id: 5967, dryRun: true, cloneMissing: false });
+    assert.equal(dry.ok, true, dry.message);
+    assert.equal(dry.prompt, `产物放 ${join(h.root, "BUG #5967 登录页报错")}，单子 BUG #5967`);
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test("真开工（没发提示词）：只建工作区与会话，不给空会话改名", async () => {
   const h = await harness();
   try {
