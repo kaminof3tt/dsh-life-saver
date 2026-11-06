@@ -1,7 +1,9 @@
 node_modules/
 .tmp/
-zentao-extract/
+/zentao-extract/
 *.log
 .DS_Store
 lib/
 *.tgz
+__pycache__/
+*.pyc

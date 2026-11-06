@@ -11,6 +11,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -24,6 +25,7 @@ function makeContext(extras = {}) {
   const routes = [];
   const disposers = [];
   const settingsCalls = [];
+  const skillProviders = [];
   const ctx = {
     fiber: { uid: 1 },
     logger: { info() {}, warn() {}, debug() {}, error() {} },
@@ -41,12 +43,18 @@ function makeContext(extras = {}) {
         tools: { register: (definition) => (tools.push(definition), () => {}) },
         webServer: { register: (route) => (routes.push(route), () => {}) },
         settings: { configure: (options, fiber) => (settingsCalls.push({ options, fiber }), () => {}) },
+        skills: {
+          registerProvider: (create) => {
+            skillProviders.push(create({ signal: new AbortController().signal, invalidate() {} }));
+            return () => {};
+          },
+        },
       };
       callback(scoped);
     },
     tools: { register: (definition) => (tools.push(definition), () => {}) },
   };
-  return { ctx, tools, routes, settingsCalls, disposers };
+  return { ctx, tools, routes, settingsCalls, disposers, skillProviders };
 }
 
 /** 把一条 exact 路由当 HTTP 请求打一次，返回 { status, body }。 */
@@ -119,6 +127,58 @@ test("宿主入口：注册八个工具、关掉自动表单、挂九条 bridge 
       "/api/dsh-life-saver/test",
     ],
   );
+});
+
+test("随包 skill：三个禅道 skill 都注册进技能表，正文能取到", async () => {
+  const mod = await import(pathToFileURL(join(root, "lib", "index.js")).href);
+  const { ctx, skillProviders } = makeContext();
+  mod.apply(ctx, mod.Config());
+
+  assert.equal(skillProviders.length, 1, "应该只注册一个 skill provider");
+  const provider = skillProviders[0];
+  assert.equal(provider.name, "dsh-life-saver");
+
+  const candidates = await provider.list({});
+  assert.deepEqual(
+    candidates.map((item) => item.name).sort(),
+    ["zentao-change-assignee-scrub-trace", "zentao-extract", "zentao-weekly-report"],
+  );
+
+  for (const candidate of candidates) {
+    assert.equal(candidate.provider, "dsh-life-saver", "candidate.provider 必须与 provider 同名");
+    assert.equal(candidate.source, "bundled");
+    // 600 = BUNDLED_SKILL_RANK：比用户级 ~/.dsh/skills（400）低，用户自建的同名 skill 继续优先
+    assert.equal(candidate.rank, 600);
+    assert.deepEqual(candidate.invocation, { modelInvocable: true, userInvocable: true });
+    assert.ok(candidate.description.length > 10, `${candidate.name} 缺 description`);
+    assert.equal(candidate.resourceBase.kind, "directory");
+    assert.ok(!candidate.resourceBase.path.includes("\\"), "资源目录要用 / 分隔");
+    assert.ok(candidate.resourceBase.path.endsWith(candidate.name));
+
+    const definition = await provider.get(candidate, {});
+    assert.ok(definition.content.length > 200, `${candidate.name} 正文太短`);
+    assert.ok(!definition.content.startsWith("---"), "正文不能带 frontmatter");
+    assert.equal(definition.rank, undefined, "技能定义里不该带 rank");
+  }
+
+  // weekly 的脚本必须随包一起发出去（模型会按 base directory 拼 scripts/xxx.py 直接跑）
+  const weekly = candidates.find((item) => item.name === "zentao-weekly-report");
+  const scripts = join(dirname(weekly.locator), "scripts");
+  assert.ok(existsSync(scripts), `缺 scripts 目录：${scripts}`);
+  for (const script of ["_db.py", "audit_backlog.py", "build_week.py", "q.py", "verify_week.py"]) {
+    assert.ok(existsSync(join(scripts, script)), `缺脚本 ${script}`);
+  }
+});
+
+test("skill 资产缺失时跳过该 skill，不影响插件其余部分", async () => {
+  const skills = await import(pathToFileURL(join(root, "lib", "skills", "index.js")).href);
+  const warnings = [];
+  const provider = skills.makeSkillProvider(join(root, "assets", "no-such-dir"), {
+    warn: (message) => warnings.push(message),
+  });
+  assert.deepEqual(await provider.list({}), []);
+  assert.equal(warnings.length, 3);
+  for (const message of warnings) assert.match(message, /跳过 skill/);
 });
 
 test("bridge 路由只接受 POST + 本机/同源请求", async () => {

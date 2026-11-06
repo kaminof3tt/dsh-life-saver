@@ -3,6 +3,7 @@
  *
  * 挂载顺序（全部走 `ctx.inject`，服务可能晚于本插件就绪）：
  *   tools      → 注册 zentao_read / zentao_search / zentao_status / zentao_session_start 四个工具
+ *   skills     → 注册三个随包发布的禅道 skill（zentao-extract / …-scrub-trace / …-weekly-report）
  *   settings   → 关掉自动生成的设置页（我们自己画），并允许写 volatile 字段
  *   webServer  → 暴露 `/api/dsh-life-saver/*` 给设置页读写
  *
@@ -28,6 +29,7 @@ import { registerTools } from "./tools/index.js";
 import { messageOf } from "life-saver-core/tools/shared.js";
 import type { SessionControllerLike, WorkspaceRegistryLike } from "./session/launcher.js";
 import { makeBridgeRoutes, type BridgeRoute, type CredentialsLike, type SettingsLike } from "./bridge/routes.js";
+import { registerSkills, type SkillRegistryLike } from "./skills/index.js";
 
 /**
  * cordis 行名（与 `cordis.patch.yml` 的 `id` 一致）。
@@ -133,6 +135,22 @@ export function apply(ctx: Context, config: LifeSaverPluginConfig): void {
         }),
       "life-saver: tools",
     );
+  });
+
+  // ---- 技能 ----
+  // 三个禅道 skill 随包发布：资产在 `assets/skills/`，`skills` 服务没就绪就跳过，
+  // 缺服务不该让取数工具一起哑火。注册失败（比如同名 provider 已存在）也只记一条 warn。
+  ctx.inject(["skills"], (sctx) => {
+    const skills = (sctx as unknown as { skills?: SkillRegistryLike }).skills;
+    if (skills === undefined) return;
+    sctx.effect(() => {
+      try {
+        return registerSkills({ skills }, logger);
+      } catch (error) {
+        logger.warn(`注册随包技能失败：${messageOf(error)}`);
+        return () => {};
+      }
+    }, "life-saver: skills");
   });
 
   // ---- 设置页 ----

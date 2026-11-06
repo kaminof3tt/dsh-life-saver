@@ -13,7 +13,7 @@ DSH 原生插件：把禅道的需求 / 任务 / BUG 直接变成 Agent 能读�
 | 目录 | 发到 npm 的名字 | 是什么 |
 |---|---|---|
 | `packages/core` | `life-saver-core` | 与框架无关的取数/写入层：两条通道（只读库 + SFTP、账号密码走页面）、配置 schema、域模型与渲染。零 `@deepseek-ai` 依赖，MCP 服务器也能直接用它 |
-| `packages/plugin` | `dsh-life-saver` | DSH 插件壳：cordis 入口、7 个工具、`/api/dsh-life-saver/*` 桥接路由、设置页、拉完内容开新会话 |
+| `packages/plugin` | `dsh-life-saver` | DSH 插件壳：cordis 入口、8 个工具、3 个随包发布的技能、`/api/dsh-life-saver/*` 桥接路由、设置页、拉完内容开新会话 |
 
 装进 DSH 的是 `packages/plugin`，但它依赖 `life-saver-core`，所以两个包都得构建。
 `lib/` 不再随仓库提交（`.gitignore` 里有），克隆下来要先构建。
@@ -153,6 +153,23 @@ zentao_session_start ({ kind, id, targetId?, prompt?, dryRun?, cloneMissing?, up
 - `zentao_bug_op`：改**BUG**。`action` = `confirm`（确认）/ `resolve`（解决）/ `close`（关闭）/ `comment`（备注）/ `recordworkhour`（记日志工时）。
 - `zentao_session_start`：读完编号后在对应工作区**开一个新会话**去干活，见下节。
 - `zentao_commit`：把**本次对话改的文件**提交成一条带禅道单子信息的提交，见「提交代码（zentao_commit）」。
+
+## 三个随包技能
+
+插件里带了三份 SKILL.md，装完插件就在技能清单里，**不用再手工往 `~/.dsh/skills/` 拷**。
+资产在 `packages/plugin/assets/skills/<name>/`，包内以 bundled provider 注册（`provider: "dsh-life-saver"`）。
+
+| 技能 | 干什么 |
+|---|---|
+| `zentao-extract` | 给编号就全量提取：正文、备注、操作记录、附件实体，并递归带出关联需求的正文/备注/附件。首选通道就是本插件的 `zentao_read`，插件不可用时退回 `D:\workspace2\zentao\zentao.py` |
+| `zentao-change-assignee-scrub-trace` | 改派 + 抹痕迹：一个事务里删掉该次 `assigned` 在 7 张表里的行、回写业务表 4 个字段、对齐 `zt_history`，让页面看不出后期改动 |
+| `zentao-weekly-report` | 个人周报：按公司模板出 xlsx，做「本周表 vs 工时库」「下周计划 vs 未完成待办」双对账，再排版目检。`scripts/` 里 7 个脚本（6 个 Python + 1 个 PowerShell）随包发布 |
+
+三点要知道的：
+
+1. **优先级**：bundled 的 rank 是 600，用户级 `~/.dsh/skills/` 是 400 —— 数字小的优先级高，所以**本机已经存过同名 skill 的人用的还是自己那份**，插件版只是给没存过的人一个开箱可用的默认。想用插件版就把 `~/.dsh/skills/<name>/` 挪走。
+2. **脚本不写死连接信息**：weekly 的 6 个 Python 脚本和 scrub-trace 的骨架都只读环境变量（`ZENTAO_DB_HOST` / `ZENTAO_DB_PORT` / `ZENTAO_DB_USER` / `ZENTAO_DB_PASSWORD`，库名可选 `ZENTAO_DB_NAME`），**四个全必填、没有默认值**，缺一个直接退出码 2。取值照设置页的 `db.*` 填就行。
+3. **资源目录**：加载技能时 `<skill_resources>` 给的就是 `assets/skills/<name>/` 的绝对路径，`scripts/xxx.py` 按它拼。
 
 ## 写入禅道（zentao_task_op / zentao_bug_op）
 
@@ -561,6 +578,14 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 同一版还改了开场提示词：要求新会话先在工作区根目录建一个和会话名同名的文件夹，这次产生的文件都放进去
 （会话名里的非法字符换 `-`，目录绝对路径既写进默认模板、也作为 `{{dir}}` 给自定义模板用）。
 
+下一版（未发布）：三个禅道 skill 随包发布（`zentao-extract` / `zentao-change-assignee-scrub-trace` /
+`zentao-weekly-report`）。以前它们只存在于作者本机的 `~/.dsh/skills/`，换台机器就得手工搬 7 个文件，而这些 skill
+依赖的正是本插件的 `zentao_*` 工具——打进包里之后 `npm i dsh-life-saver` 就有全套。实现走 bundled provider
+（`packages/plugin/src/skills/index.ts`，`assets/skills/<name>/SKILL.md` 进 `files`），rank 用 600，比用户级 400 低，
+所以本机存过同名 skill 的人照旧用自己那份。
+同一版还做了一次凭据清理：三个 skill 里写死的库地址/账号/口令全部改成环境变量（四个必填、无默认值，
+缺一个退出码 2），`zentao-extract` 里过期的源码路径也改到当前仓库位置。仓库是 public，这些值本来就不该出现。
+
 
 ## 开发
 
@@ -568,7 +593,7 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 pnpm build      # 按依赖序：core 出 tsc + d.ts，插件出宿主 ESM + esbuild 客户端 bundle
 pnpm typecheck  # pnpm -r：core 一份、插件宿主 + 客户端各一份
 pnpm lint       # eslint：客户端 JSX 与各包的 scripts/test（.ts 交给 tsc，不重复上一道闸）
-pnpm test       # pnpm -r：core 105 条 + 插件 89 条
+pnpm test       # pnpm -r：core 114 条 + 插件 106 条
 ```
 
 单包操作加 `--filter`：`pnpm --filter life-saver-core test`、`pnpm --filter dsh-life-saver build`。
@@ -588,7 +613,7 @@ pnpm test       # pnpm -r：core 105 条 + 插件 89 条
 - `test/config-keys.test.mjs`：配置键对齐——`FIELDS` 里的路径都得在 schema 里存在、schema 里每个键都得有入口、`kind`/`section` 只用品类里已有的值、路径不重复
 - `test/bridge-contract.test.mjs`：桥接路由与写工具的对外承诺——`config-describe` 原样摊开宿主那一行（含 `found:false`）、`config-set` 的往返与 `revision` 前进、六种非法提交在碰到宿主前就被拒、版本冲突翻成 `config-conflict`、设置服务没就绪说人话、只认本机/同源 POST、`zentao_bug_op` 不认任务动作且把合法动作写进报错
 
-- `test/smoke.test.mjs`：宿主注册了哪七个工具、九条路由（含 `config-set` 的 ops 校验与错误透传、`test` 的草稿覆盖）、请求体解码（GBK 字节不静默变乱码）、配置页产物形状
+- `test/smoke.test.mjs`：宿主注册了哪八个工具、哪个技能 provider（三个禅道 skill 的 name/rank/资源目录/正文，以及资产缺失时只跳过自己）、九条路由（含 `config-set` 的 ops 校验与错误透传、`test` 的草稿覆盖）、请求体解码（GBK 字节不静默变乱码）、配置页产物形状
 - `test/client-render.test.mjs`：配置页在加载/不可用/就绪/只读四种状态下都能渲染；保存走 `/config-set` 且把宿主原话显示出来；测试连接把未保存的草稿一起送出
 - `test/render.test.mjs`：模型读到的 markdown 长什么样（图片不重复、未下载附件留锚点、brief 折叠、HTTP 正文的「## 重现步骤」不重复套标题）
 - `test/db-abort.test.mjs`：连不上库时「停止」能在亚秒级生效，且后台连接失败不会崩宿主
@@ -617,7 +642,7 @@ pnpm test       # pnpm -r：core 105 条 + 插件 89 条
 
 | 文件 | 什么时候跑 | 干什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | 推到 `main`、每个 PR、手动 | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm lint` → `pnpm test`（194 条） |
+| `.github/workflows/ci.yml` | 推到 `main`、每个 PR、手动 | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm lint` → `pnpm test`（220 条） |
 | `.github/workflows/release.yml` | 推 `v*` tag，或手动填版本号 | 改 manifest 版本 → 断言三个 manifest 一致 → 同一套构建与测试 → 先发 `life-saver-core`，确认能从 npm 查到之后再发 `dsh-life-saver` |
 
 几条硬约定：
@@ -643,7 +668,7 @@ git checkout -- package.json packages/*/package.json   # 干跑完记得还原
 | 环节 | 怎么验的 | 结果 |
 |---|---|---|
 | 构建 / 类型 / 风格 | `pnpm build`、`pnpm -r typecheck`、`pnpm lint` | 全部通过：core 出 `lib/*.js` + `*.d.ts`，插件出宿主 ESM 与客户端 bundle |
-| 测试 | `pnpm test` | 218 条全绿（core 114 / 插件 104） |
+| 测试 | `pnpm test` | 220 条全绿（core 114 / 插件 106） |
 | 打包 | `pnpm --filter life-saver-core pack` 后在空目录 `npm i <tgz>` | 通过：包名导入、深层导入（`life-saver-core/channels/write.js`）、`.d.ts` 类型解析、配置 schema 都能用 |
 | 装进宿主 | junction 到 `~/.dsh/profiles/desktop/node_modules/dsh-life-saver`（→ `packages/plugin`）+ `cordis.patch.yml` 的 `- insert:` 行 | 重启后 `zentao_status`/`zentao_read`/`zentao_search` 出现在工具清单 |
 | 桥接协议 | 对 `http://127.0.0.1:<port>/api/dsh-life-saver/{test,credentials-status}` 发 POST | 200，返回真实 `mode`/`missing`/`probe` 与三把凭据状态 |

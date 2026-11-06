@@ -20,6 +20,9 @@
   },
   "files": [
     "lib/**/*.js",
+    "assets",
+    "!assets/**/__pycache__",
+    "!assets/**/*.pyc",
     "cordis.patch.yml"
   ],
   "scripts": {
@@ -43,7 +46,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "life-saver-core": "workspace:*"
+    "life-saver-core": "workspace:*",
+    "yaml": "^2.9.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
