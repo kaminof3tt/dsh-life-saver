@@ -27,14 +27,17 @@ plan 每项：[项目键, 类型, 禅道ID, 备注, 进度, 开始, 结束, 工�
 """
 import math, shutil, io, sys, json, datetime as dt
 from copy import copy
-import pymysql, openpyxl
+import _db
+
+_db.require_modules('openpyxl')
+import openpyxl
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
-import _db
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-DB = _db.params()
+if len(sys.argv) < 2:
+    raise SystemExit('用法：python build_week.py spec.json   （spec 结构见文件头注释）')
 
 # 项目键 -> (项目名称, 分支名称)
 PROJ = {
@@ -105,7 +108,7 @@ def main():
     spec = json.load(open(sys.argv[1], encoding='utf-8'))
     src, dst, owner = spec['src'], spec['dst'], spec.get('owner', '胡志豪')
 
-    conn = pymysql.connect(**DB)
+    conn = _db.connect()
     cur = conn.cursor()
 
     def title(kind, oid):

@@ -1,0 +1,10 @@
+# zentao-weekly-report 的脚本依赖（Python 3.9+）
+#
+#   python -m pip install -r requirements.txt
+#
+# pymysql   —— q.py / audit_backlog.py / build_week.py / verify_week.py 连禅道库
+# openpyxl  —— build_week.py 读模板、写 xlsx；verify_week.py 读回 xlsx 对账
+# pymupdf   —— pdf2png.py 把导出的 PDF 转 PNG 做排版目检（只有做目检时才需要）
+pymysql>=1.1
+openpyxl>=3.1
+pymupdf>=1.24

@@ -170,6 +170,7 @@ zentao_session_start ({ kind, id, targetId?, prompt?, dryRun?, cloneMissing?, up
 1. **优先级**：bundled 的 rank 是 600，用户级 `~/.dsh/skills/` 是 400 —— 数字小的优先级高，所以**本机已经存过同名 skill 的人用的还是自己那份**，插件版只是给没存过的人一个开箱可用的默认。想用插件版就把 `~/.dsh/skills/<name>/` 挪走。
 2. **脚本不写死连接信息**：weekly 的 6 个 Python 脚本和 scrub-trace 的骨架都只读环境变量（`ZENTAO_DB_HOST` / `ZENTAO_DB_PORT` / `ZENTAO_DB_USER` / `ZENTAO_DB_PASSWORD`，库名可选 `ZENTAO_DB_NAME`），**四个全必填、没有默认值**，缺一个直接退出码 2。取值照设置页的 `db.*` 填就行。
 3. **资源目录**：加载技能时 `<skill_resources>` 给的就是 `assets/skills/<name>/` 的绝对路径，`scripts/xxx.py` 按它拼。
+4. **Python 依赖**：weekly 的脚本要 `pymysql` / `openpyxl` / `pymupdf`，清单在 `scripts/requirements.txt`；换机器先 `python -m pip install -r <base>/scripts/requirements.txt`，缺包时脚本会直接说缺哪个（退出码 3）而不是抛 traceback。
 
 ## 写入禅道（zentao_task_op / zentao_bug_op）
 
@@ -593,7 +594,7 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 pnpm build      # 按依赖序：core 出 tsc + d.ts，插件出宿主 ESM + esbuild 客户端 bundle
 pnpm typecheck  # pnpm -r：core 一份、插件宿主 + 客户端各一份
 pnpm lint       # eslint：客户端 JSX 与各包的 scripts/test（.ts 交给 tsc，不重复上一道闸）
-pnpm test       # pnpm -r：core 114 条 + 插件 106 条
+pnpm test       # pnpm -r：core 114 条 + 插件 108 条
 ```
 
 单包操作加 `--filter`：`pnpm --filter life-saver-core test`、`pnpm --filter dsh-life-saver build`。
@@ -613,7 +614,7 @@ pnpm test       # pnpm -r：core 114 条 + 插件 106 条
 - `test/config-keys.test.mjs`：配置键对齐——`FIELDS` 里的路径都得在 schema 里存在、schema 里每个键都得有入口、`kind`/`section` 只用品类里已有的值、路径不重复
 - `test/bridge-contract.test.mjs`：桥接路由与写工具的对外承诺——`config-describe` 原样摊开宿主那一行（含 `found:false`）、`config-set` 的往返与 `revision` 前进、六种非法提交在碰到宿主前就被拒、版本冲突翻成 `config-conflict`、设置服务没就绪说人话、只认本机/同源 POST、`zentao_bug_op` 不认任务动作且把合法动作写进报错
 
-- `test/smoke.test.mjs`：宿主注册了哪八个工具、哪个技能 provider（三个禅道 skill 的 name/rank/资源目录/正文，以及资产缺失时只跳过自己）、九条路由（含 `config-set` 的 ops 校验与错误透传、`test` 的草稿覆盖）、请求体解码（GBK 字节不静默变乱码）、配置页产物形状
+- `test/smoke.test.mjs`：宿主注册了哪八个工具、哪个技能 provider（三个禅道 skill 的 name/rank/资源目录/正文/whenToUse，requirements.txt 随包、资产缺失时只跳过自己、frontmatter 解析的两条报错路径、改完 description 后 list() 现扫生效）、九条路由（含 `config-set` 的 ops 校验与错误透传、`test` 的草稿覆盖）、请求体解码（GBK 字节不静默变乱码）、配置页产物形状
 - `test/client-render.test.mjs`：配置页在加载/不可用/就绪/只读四种状态下都能渲染；保存走 `/config-set` 且把宿主原话显示出来；测试连接把未保存的草稿一起送出
 - `test/render.test.mjs`：模型读到的 markdown 长什么样（图片不重复、未下载附件留锚点、brief 折叠、HTTP 正文的「## 重现步骤」不重复套标题）
 - `test/db-abort.test.mjs`：连不上库时「停止」能在亚秒级生效，且后台连接失败不会崩宿主
@@ -642,7 +643,7 @@ pnpm test       # pnpm -r：core 114 条 + 插件 106 条
 
 | 文件 | 什么时候跑 | 干什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | 推到 `main`、每个 PR、手动 | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm lint` → `pnpm test`（220 条） |
+| `.github/workflows/ci.yml` | 推到 `main`、每个 PR、手动 | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm lint` → `pnpm test`（222 条） |
 | `.github/workflows/release.yml` | 推 `v*` tag，或手动填版本号 | 改 manifest 版本 → 断言三个 manifest 一致 → 同一套构建与测试 → 先发 `life-saver-core`，确认能从 npm 查到之后再发 `dsh-life-saver` |
 
 几条硬约定：
@@ -668,7 +669,7 @@ git checkout -- package.json packages/*/package.json   # 干跑完记得还原
 | 环节 | 怎么验的 | 结果 |
 |---|---|---|
 | 构建 / 类型 / 风格 | `pnpm build`、`pnpm -r typecheck`、`pnpm lint` | 全部通过：core 出 `lib/*.js` + `*.d.ts`，插件出宿主 ESM 与客户端 bundle |
-| 测试 | `pnpm test` | 220 条全绿（core 114 / 插件 106） |
+| 测试 | `pnpm test` | 222 条全绿（core 114 / 插件 108） |
 | 打包 | `pnpm --filter life-saver-core pack` 后在空目录 `npm i <tgz>` | 通过：包名导入、深层导入（`life-saver-core/channels/write.js`）、`.d.ts` 类型解析、配置 schema 都能用 |
 | 装进宿主 | junction 到 `~/.dsh/profiles/desktop/node_modules/dsh-life-saver`（→ `packages/plugin`）+ `cordis.patch.yml` 的 `- insert:` 行 | 重启后 `zentao_status`/`zentao_read`/`zentao_search` 出现在工具清单 |
 | 桥接协议 | 对 `http://127.0.0.1:<port>/api/dsh-life-saver/{test,credentials-status}` 发 POST | 200，返回真实 `mode`/`missing`/`probe` 与三把凭据状态 |

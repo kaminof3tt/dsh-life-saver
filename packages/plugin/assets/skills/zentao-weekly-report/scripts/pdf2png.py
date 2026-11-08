@@ -3,9 +3,17 @@
 
 用法： python pdf2png.py <pdf> <输出前缀> [dpi]
 产出：<前缀>1.png, <前缀>2.png ...
-依赖：pymupdf（未装则 pip install pymupdf）
+依赖：pymupdf（见同目录 requirements.txt；缺包时这里会直接说怎么装）
 """
-import sys, pymupdf
+import sys
+
+if len(sys.argv) < 2:
+    raise SystemExit('用法：python pdf2png.py <pdf> <输出前缀> [dpi]')
+
+try:
+    import pymupdf
+except ImportError:
+    raise SystemExit('缺少 Python 依赖 pymupdf：python -m pip install pymupdf')
 
 pdf = sys.argv[1]
 prefix = sys.argv[2] if len(sys.argv) > 2 else 'pg'

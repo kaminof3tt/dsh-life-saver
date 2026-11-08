@@ -12,14 +12,22 @@
 
 退出码非 0 表示有缺项或合计不一致。
 """
-import sys, io, pymysql, openpyxl
+import sys, io
 import _db
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+if len(sys.argv) < 4:
+    raise SystemExit('用法：python verify_week.py <xlsx> <eff_from> <eff_to> [account]\n'
+                     '  <eff_from>/<eff_to> 是取工时的日期窗口（YYYY-MM-DD），'
+                     '一般比汇报周多往前 2 天。')
 
 path, d1, d2 = sys.argv[1], sys.argv[2], sys.argv[3]
 account = sys.argv[4] if len(sys.argv) > 4 else 'huzhihao'
 
-conn = pymysql.connect(**_db.params())
+_db.require_modules('openpyxl')
+import openpyxl
+
+conn = _db.connect()
 cur = conn.cursor()
 cur.execute(
     "SELECT e.objectType, e.objectID, SUM(e.consumed) "

@@ -6,14 +6,15 @@
 - 结果写成 UTF-8 文本（Windows 控制台是 GBK，直接 print 中文会乱码，所以一律落文件）
 - 连接信息只从环境变量读（见 _db.py），脚本不内置地址与口令
 """
-import sys, io, pymysql
+import sys, io
 import _db
 
-DB = _db.params(dict_cursor=True)
+if len(sys.argv) < 3:
+    raise SystemExit('用法：python q.py <sql文件> <输出文件>   （SQL 里多条语句用 ;; 分隔）')
 
 sql = open(sys.argv[1], encoding='utf-8-sig').read()
 out = io.StringIO()
-c = pymysql.connect(**DB)
+c = _db.connect(dict_cursor=True)
 with c.cursor() as cur:
     for stmt in [s for s in sql.split(';;') if s.strip()]:
         cur.execute(stmt)

@@ -58,11 +58,21 @@ export ZENTAO_DB_HOST='<host>' ZENTAO_DB_PORT='<port>' ZENTAO_DB_USER='<user>' Z
 
 **取值来源**：本机装了 `dsh-life-saver` 插件时，地址/端口/账号照设置页里 `db.host` / `db.port` / `db.user` 填（或直接跑一次 `zentao_status()` 看现成输出），口令对应 `ZENTAO_DB_PASSWORD`。环境变量与服务端配置保持一致即可，不用另猜。
 
+## Python 依赖（换机器先装一次）
+
+脚本依赖 `pymysql` / `openpyxl` / `pymupdf`，清单在 `scripts/requirements.txt`：
+
+```bash
+python -m pip install -r <本 skill 目录>/scripts/requirements.txt
+```
+
+缺包时脚本不会脆到抛 traceback，而是直接说缺哪个、怎么装（退出码 3）。
+
 ## 环境常量（本机，已验证）
 
 | 项 | 值 |
 |---|---|
-| Python | `C:\Python313\python.exe`（已装 pymysql / openpyxl / pymupdf） |
+| Python | `C:\Python313\python.exe`（本机已装 pymysql / openpyxl / pymupdf；换机器按上一节装） |
 | 公司模板 | `D:\Document\公司\研发-后端-胡志豪.xlsx`（**只读，永远不覆盖**，改副本） |
 | 成品命名 | `D:\Document\公司\研发-后端-胡志豪_<YYYYMMDD>-<YYYYMMDD>.xlsx` |
 | 本 skill 脚本 | base directory 下的 `scripts/`（加载本 skill 时给出的绝对路径） |

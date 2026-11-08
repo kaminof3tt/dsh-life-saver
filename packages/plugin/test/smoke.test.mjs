@@ -11,7 +11,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -159,6 +160,9 @@ test("随包 skill：三个禅道 skill 都注册进技能表，正文能取到"
     assert.ok(definition.content.length > 200, `${candidate.name} 正文太短`);
     assert.ok(!definition.content.startsWith("---"), "正文不能带 frontmatter");
     assert.equal(definition.rank, undefined, "技能定义里不该带 rank");
+    // whenToUse 要从 frontmatter 一路透传到 candidate 与 definition
+    assert.equal(typeof candidate.whenToUse, "string", `${candidate.name} 丢了 whenToUse`);
+    assert.equal(definition.whenToUse, candidate.whenToUse);
   }
 
   // weekly 的脚本必须随包一起发出去（模型会按 base directory 拼 scripts/xxx.py 直接跑）
@@ -168,6 +172,7 @@ test("随包 skill：三个禅道 skill 都注册进技能表，正文能取到"
   for (const script of ["_db.py", "audit_backlog.py", "build_week.py", "q.py", "verify_week.py"]) {
     assert.ok(existsSync(join(scripts, script)), `缺脚本 ${script}`);
   }
+  assert.ok(existsSync(join(scripts, "requirements.txt")), "缺 requirements.txt（换机器要按它装依赖）");
 });
 
 test("skill 资产缺失时跳过该 skill，不影响插件其余部分", async () => {
@@ -367,4 +372,42 @@ test("客户端产物：包成 ModuleLoader，apply() 注册 plugins.row.config"
   assert.equal(registered[0].options.name, "plugins.row.config");
   assert.equal(registered[0].options.key, "dsh-life-saver#life-saver");
   assert.equal(typeof registered[0].component, "function");
+});
+
+test("frontmatter 解析：缺 frontmatter / 缺 description 都要报人话", async () => {
+  const skills = await import(pathToFileURL(join(root, "lib", "skills", "index.js")).href);
+  assert.throws(() => skills.parseSkill("# 没有 frontmatter\n", "x/SKILL.md"), /缺少 YAML frontmatter/);
+  assert.throws(() => skills.parseSkill("---\nname: demo\n---\nbody\n", "y/SKILL.md"), /缺少 description/);
+  assert.throws(
+    () => skills.parseSkill(`---\ndescription: ""\n---\nbody\n`, "z/SKILL.md"),
+    /缺少 description/,
+  );
+
+  const parsed = skills.parseSkill("---\ndescription: 演示\nwhenToUse: 演示用\n---\n\n# 正文\n", "w/SKILL.md");
+  assert.equal(parsed.description, "演示");
+  assert.equal(parsed.whenToUse, "演示用");
+  assert.equal(parsed.content, "# 正文");
+});
+
+test("改完 SKILL.md 的 description，下一次 list() 就生效（不用重启）", async () => {
+  const skills = await import(pathToFileURL(join(root, "lib", "skills", "index.js")).href);
+  const dir = mkdtempSync(join(tmpdir(), "life-saver-skill-"));
+  const skillDir = join(dir, "zentao-extract");
+  mkdirSync(skillDir, { recursive: true });
+  const file = join(skillDir, "SKILL.md");
+  try {
+    writeFileSync(file, "---\ndescription: 第一版\n---\n\n正文 v1\n", "utf8");
+    const provider = skills.makeSkillProvider(dir, { warn() {} });
+    const first = await provider.list({});
+    assert.equal(first.length, 1);
+    assert.equal(first[0].description, "第一版");
+
+    writeFileSync(file, "---\ndescription: 第二版\n---\n\n正文 v2\n", "utf8");
+    const second = await provider.list({});
+    assert.equal(second[0].description, "第二版", "list() 要现扫，不能像 apply 时那样算死");
+    // 正文本来就是现读的，改完立即生效
+    assert.match((await provider.get(second[0], {})).content, /正文 v2/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

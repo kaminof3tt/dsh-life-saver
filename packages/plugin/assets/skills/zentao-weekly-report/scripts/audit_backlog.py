@@ -13,12 +13,10 @@
   未完成任务   zt_task.assignedTo=账号 AND deleted='0' AND status IN ('wait','doing','pause')
   未启动需求   zt_story.assignedTo=账号 AND deleted='0' AND stage='projected'
 """
-import sys, io, json, pymysql
+import sys, io, json
 import _db
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
-DB = _db.params(dict_cursor=True)
 
 # 项目 -> 周报里的项目键（用于提示，不参与判定）
 PROJECT_KEY = {215: 'YQ', 129: 'YQ0', 141: 'SZH', 135: 'KS',
@@ -31,7 +29,7 @@ def main():
     account = sys.argv[1] if len(sys.argv) > 1 else 'huzhihao'
     spec_path = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].endswith('.json') else None
 
-    conn = pymysql.connect(**DB)
+    conn = _db.connect(dict_cursor=True)
     cur = conn.cursor()
 
     cur.execute("""SELECT b.id, b.title, b.severity, b.project, LEFT(p.name,30) pname,

@@ -10,11 +10,23 @@
 
 地址/端口/账号从 DSH 设置页的 dsh-life-saver 插件配置里取（`db.host` / `db.port` /
 `db.user`，或 `zentao_status()` 的输出），口令在凭据中心或 `ZENTAO_DB_PASSWORD`。
+
+Python 依赖（pymysql / openpyxl / pymupdf）见同目录 requirements.txt；
+缺包时这里会直接说缺哪个、怎么装（退出码 3），不用等脚本跑到一半才抛 traceback。
 """
 import os
 import sys
 
 REQUIRED = ('ZENTAO_DB_HOST', 'ZENTAO_DB_PORT', 'ZENTAO_DB_USER', 'ZENTAO_DB_PASSWORD')
+
+# 模块名 → pip 包名（安装提示用；pymupdf 的导入名和包名恰好一致，但仍写全）
+MODULE_HINTS = {
+    'pymysql': 'pymysql',
+    'openpyxl': 'openpyxl',
+    'pymupdf': 'pymupdf',
+}
+
+REQUIREMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt')
 
 
 def _missing():
@@ -38,9 +50,31 @@ def require():
         raise SystemExit(2)
 
 
-def params(dict_cursor=False):
-    """返回 pymysql.connect 的参数；dict_cursor=True 时带 DictCursor。"""
+def require_modules(*names):
+    """校验 Python 依赖，缺了就打印人话并退出码 3。"""
+    missing = []
+    for name in names:
+        try:
+            __import__(name)
+        except ImportError:
+            missing.append(name)
+    if missing:
+        packages = ' '.join(MODULE_HINTS.get(name, name) for name in missing)
+        sys.stderr.write(
+            '缺少 Python 依赖：%s\n'
+            '装一次就好：  python -m pip install %s\n'
+            '或者：        python -m pip install -r "%s"\n'
+            % (', '.join(missing), packages, REQUIREMENTS)
+        )
+        raise SystemExit(3)
+
+
+def connect(dict_cursor=False):
+    """校验依赖与环境变量后直连，返回 pymysql 连接。"""
+    require_modules('pymysql')
     require()
+    import pymysql
+
     options = dict(
         host=os.environ['ZENTAO_DB_HOST'],
         port=int(os.environ['ZENTAO_DB_PORT']),
@@ -50,18 +84,12 @@ def params(dict_cursor=False):
         charset='utf8mb4',
     )
     if dict_cursor:
-        import pymysql
         options['cursorclass'] = pymysql.cursors.DictCursor
-    return options
-
-
-def connect(dict_cursor=False):
-    """直连并返回 connection。"""
-    import pymysql
-    return pymysql.connect(**params(dict_cursor=dict_cursor))
+    return pymysql.connect(**options)
 
 
 if __name__ == '__main__':
+    require_modules('pymysql')
     require()
     print('ok: %s:%s/%s as %s' % (
         os.environ['ZENTAO_DB_HOST'],

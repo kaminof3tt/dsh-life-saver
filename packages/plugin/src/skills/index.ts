@@ -14,7 +14,7 @@
  * 开箱可用的默认值，不会顶掉用户的改动。
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -118,7 +118,7 @@ export function buildCandidates(
     const directory = join(assetRoot, skillName);
     const locator = join(directory, "SKILL.md");
     try {
-      if (!statSync(locator).isFile()) throw new Error("不是文件");
+      // readFileSync 自己会抛 ENOENT/EISDIR，不必再 statSync 一次。
       const parsed = parseSkill(readFileSync(locator, "utf8"), locator);
       candidates.push({
         name: skillName,
@@ -142,17 +142,18 @@ export function buildCandidates(
 /**
  * 造一个 provider 对象（`registerProvider` 的工厂返回值）。
  *
- * `list()` 返回上面扫出来的 candidate；`get()` 现读 SKILL.md 正文——candidate 里只有
- * 摘要，正文按需加载，列表刷新时不用把三份文档都读一遍。
+ * `list()` **每次现扫**：只读三个小文件，代价可忽略，换来「改完 SKILL.md 的
+ * description 不用重启 DSH」——注册表的目录缓存只会在这个 provider 失效时才刷新，
+ * 所以在 apply 时算死 candidate 的话，描述改了就一直是旧的。
+ * `get()` 同样现读正文：正文从来不在注册表里缓存，改完立刻生效。
  */
 export function makeSkillProvider(
   assetRoot: string,
   logger: { warn(message: string): void },
 ): SkillProviderLike {
-  const candidates = buildCandidates(assetRoot, logger);
   return {
     name: PROVIDER_NAME,
-    list: () => Promise.resolve(candidates),
+    list: async () => buildCandidates(assetRoot, logger),
     async get(candidate) {
       const { rank: _rank, locator, ...summary } = candidate;
       const { content } = parseSkill(readFileSync(locator, "utf8"), locator);
