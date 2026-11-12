@@ -162,7 +162,7 @@ zentao_session_start ({ kind, id, targetId?, prompt?, dryRun?, cloneMissing?, up
 | 技能 | 干什么 |
 |---|---|
 | `zentao-extract` | 给编号就全量提取：正文、备注、操作记录、附件实体，并递归带出关联需求的正文/备注/附件。首选通道就是本插件的 `zentao_read`，插件不可用时退回 `D:\workspace2\zentao\zentao.py` |
-| `zentao-change-assignee-scrub-trace` | 改派 + 抹痕迹：一个事务里删掉该次 `assigned` 在 7 张表里的行、回写业务表 4 个字段、对齐 `zt_history`，让页面看不出后期改动 |
+| `zentao-change-assignee-scrub-trace` | 改派 + 抹痕迹，两种形态：①物理删除该次 `assigned` 在 7 张表里的行、回写业务表 4 个字段、对齐 `zt_history`；②保留 action id/时间，就地改写最后两条指派（A→B、B→C）。两种都要顺带处理派生的 `zt_notify` 提醒，让页面看不出后期改动 |
 | `zentao-weekly-report` | 个人周报：按公司模板出 xlsx，做「本周表 vs 工时库」「下周计划 vs 未完成待办」双对账，再排版目检。`scripts/` 里 7 个脚本（6 个 Python + 1 个 PowerShell）随包发布 |
 
 三点要知道的：
@@ -586,6 +586,10 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 所以本机存过同名 skill 的人照旧用自己那份。
 同一版还做了一次凭据清理：三个 skill 里写死的库地址/账号/口令全部改成环境变量（四个必填、无默认值，
 缺一个退出码 2），`zentao-extract` 里过期的源码路径也改到当前仓库位置。仓库是 public，这些值本来就不该出现。
+
+再补充：`zentao-change-assignee-scrub-trace` 补齐了作者本机 11-11 新增的三块实战内容——改派的下游产物（派生 `zt_notify`
+到期提醒怎么取舍）、就地改写变体（Bug 6459，六张表逐项改法 + IM 双层转义 JSON 定点替换 + 回滚坑）、
+以及「用形态特征全库比对自证」的方法。仓库版此前只有「删掉一条」这一种形态。
 
 
 ## 开发
