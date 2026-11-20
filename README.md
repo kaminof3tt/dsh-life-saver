@@ -570,7 +570,7 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 附件时列出试过的候选路径。搜索还加了一层兜底：结构没探过就撞上 `Unknown column 'keywords'`，自动退成只按标题
 重搜一次（换禅道往往是先搜索、后体检）。
 
-0.8.1（未发布）：补闸门，不重构。功能跑得快，闸门跟不上——客户端 1577 行 JSX 一直不在类型检查里（构建只转译），
+0.8.1：补闸门，不重构。功能跑得快，闸门跟不上——客户端 1577 行 JSX 一直不在类型检查里（构建只转译），
 于是 0.8.0 的 `TargetCard` 引用作用域外变量这种事能一路进到运行时，表现成「配置页整页空白」。这一版补三道：
 客户端进 `tsc`（`tsconfig.client.json`，`allowJs + checkJs`）、加最小 eslint、补两类契约测试（桥接路由往返 +
 写工具动作白名单、客户端字段表与配置 schema 对齐）。顺手修掉两个真问题：配置只读时「开新会话/试运行」按钮
@@ -579,7 +579,7 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 同一版还改了开场提示词：要求新会话先在工作区根目录建一个和会话名同名的文件夹，这次产生的文件都放进去
 （会话名里的非法字符换 `-`，目录绝对路径既写进默认模板、也作为 `{{dir}}` 给自定义模板用）。
 
-下一版（未发布）：三个禅道 skill 随包发布（`zentao-extract` / `zentao-change-assignee-scrub-trace` /
+0.8.2～0.8.4：三个禅道 skill 随包发布（`zentao-extract` / `zentao-change-assignee-scrub-trace` /
 `zentao-weekly-report`）。以前它们只存在于作者本机的 `~/.dsh/skills/`，换台机器就得手工搬 7 个文件，而这些 skill
 依赖的正是本插件的 `zentao_*` 工具——打进包里之后 `npm i dsh-life-saver` 就有全套。实现走 bundled provider
 （`packages/plugin/src/skills/index.ts`，`assets/skills/<name>/SKILL.md` 进 `files`），rank 用 600，比用户级 400 低，
@@ -590,6 +590,14 @@ host/库名/账号（猜错库＝读到别人单子）；探测失败不影响�
 再补充：`zentao-change-assignee-scrub-trace` 补齐了作者本机 11-11 新增的三块实战内容——改派的下游产物（派生 `zt_notify`
 到期提醒怎么取舍）、就地改写变体（Bug 6459，六张表逐项改法 + IM 双层转义 JSON 定点替换 + 回滚坑）、
 以及「用形态特征全库比对自证」的方法。仓库版此前只有「删掉一条」这一种形态。
+
+0.9.0：把「提交 / 开工」这半边也还给 core。`zentao_commit` 与 `zentao_work_start` 的规格、执行、渲染原本只活在
+插件里，MCP 侧用不了——现在搬进 `life-saver-core`，两个壳共用同一份中文描述与参数表。顺带清掉搬迁时留下的腐化代码：
+插件里与 core 逐字节相同的 `commit/git.ts`、`commit/store.ts` 副本（无人引用）、core `work-start.ts` 里没用上的
+`branchChainText`，以及会话标题/产物目录名/`ensureRoot` 这类两边各写一份的小函数（收敛到 `workspace/layout.ts`）。
+
+一个真漂移也修了：`zentao_commit` 的 `files` 在插件里是数组、在 core 里是逗号分隔字符串，模型从两个壳看到的是两种
+说法。现在 core 的 spec 支持数组参数，两边都按数组暴露；解析仍兼容老的逗号串写法。
 
 
 ## 开发
@@ -652,8 +660,8 @@ pnpm test       # pnpm -r：core 114 条 + 插件 108 条
 
 几条硬约定：
 
-1. **版本号只有一个来源**：tag（或手动输入的 version）。manifest 由 `scripts/apply-version.mjs` 现场改，**不提交回仓**——所以 git 里的 `0.8.1` 与 npm 上的 `0.9.0` 允许差一行。
-2. **依赖靠 `workspace:*` 自动钉住**：`pnpm publish` 会把它改写成精确版本。已实测：打出来的 `dsh-life-saver-0.8.1.tgz` 里 `dependencies` 就是 `{"life-saver-core":"0.8.1"}`，不需要额外脚本。
+1. **版本号只有一个来源**：tag（或手动输入的 version）。manifest 由 `scripts/apply-version.mjs` 现场改，**不提交回仓**——所以 git 里的 `0.9.0` 与 npm 上的下一个版本号允许差一行。
+2. **依赖靠 `workspace:*` 自动钉住**：`pnpm publish` 会把它改写成精确版本。已实测：打出来的 tarball 里 `dependencies` 就是同版本 core，不需要额外脚本。
 3. **先 core 后壳**：壳钉的是同版本 core，core 没上就是 `ETARGET`。所以发布步骤是「发 core → 轮询 `npm view` 直到查得到（最多 2 分钟）→ 发壳」。
 4. **幂等**：`npm view <name>@<ver>` 已经有值就跳过，失败路径绝不 `npm unpublish`。重跑同一个 tag 是安全的。
 5. **provenance**：`--provenance` 要 `id-token: write` 与 public 仓，npm 页上会显示「由这个 commit 构建」。

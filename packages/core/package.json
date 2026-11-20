@@ -1,6 +1,6 @@
 {
   "name": "life-saver-core",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Zentao (禅道) content channel core: read/write task, bug, story bodies, comments, action history, attachments and worklogs via a read-only MariaDB + SFTP channel or an account-password HTTP channel. Framework-agnostic — used by dsh-life-saver (DSH plugin) and life-saver-mcp (MCP server).",
   "repository": {
     "type": "git",

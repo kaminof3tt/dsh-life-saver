@@ -1,7 +1,7 @@
 {
   "name": "dsh-life-saver-workspace",
   "private": true,
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "pnpm workspace: packages/core = life-saver-core (framework-agnostic Zentao channel core), packages/plugin = dsh-life-saver (DeepSeek Harness plugin shell).",
   "type": "module",
   "repository": {
