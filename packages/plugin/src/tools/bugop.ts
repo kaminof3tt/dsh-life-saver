@@ -21,6 +21,7 @@ import {
   type WriteToolOutput,
 } from "life-saver-core";
 import { parametersOf } from "./parameters.js";
+import { contextOf } from "./context.js";
 
 export function createBugOpTool(service: LifeSaverService) {
   return defineTool({
@@ -51,7 +52,7 @@ export function createBugOpTool(service: LifeSaverService) {
     },
 
     async execute(rawArgs, exec) {
-      return runBugOpTool(service, rawArgs, { signal: exec.signal, cwd: process.cwd() });
+      return runBugOpTool(service, rawArgs, contextOf(exec));
     },
   });
 }

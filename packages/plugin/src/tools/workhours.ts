@@ -17,6 +17,7 @@ import {
   type WorkhoursToolOutput,
 } from "life-saver-core";
 import { parametersOf } from "./parameters.js";
+import { contextOf } from "./context.js";
 
 export function createWorkhoursTool(service: LifeSaverService) {
   return defineTool({
@@ -41,7 +42,7 @@ export function createWorkhoursTool(service: LifeSaverService) {
     },
 
     async execute(rawArgs, exec) {
-      return runWorkhoursTool(service, rawArgs, { signal: exec.signal, cwd: process.cwd() });
+      return runWorkhoursTool(service, rawArgs, contextOf(exec));
     },
   });
 }

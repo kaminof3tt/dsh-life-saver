@@ -14,7 +14,7 @@
 
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { EntityKind } from "life-saver-core/domain/model.js";
+import type { EntityKind } from "../domain/model.js";
 
 /** 会话与禅道单子的绑定。 */
 export interface TicketBinding {

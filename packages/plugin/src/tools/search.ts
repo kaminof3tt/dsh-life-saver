@@ -14,6 +14,7 @@ import {
   type SearchToolOutput,
 } from "life-saver-core";
 import { parametersOf } from "./parameters.js";
+import { contextOf } from "./context.js";
 
 export function createSearchTool(service: LifeSaverService) {
   return defineTool({
@@ -50,7 +51,7 @@ export function createSearchTool(service: LifeSaverService) {
     },
 
     async execute(rawArgs, exec) {
-      return runSearchTool(service, rawArgs, { signal: exec.signal, cwd: process.cwd() });
+      return runSearchTool(service, rawArgs, contextOf(exec));
     },
   });
 }

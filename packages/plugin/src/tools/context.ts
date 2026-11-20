@@ -5,6 +5,8 @@
  * 所以统一在这里宽松取一遍，别处不要再各写一份 —— 取不到时的兜底策略必须只有一处。
  */
 
+import type { ToolRunContext } from "life-saver-core";
+
 /** 会话所属工作区；全摸不到才退回进程 cwd，免得把文件写到宿主 profile 里。 */
 export function cwdOf(exec: { agent?: unknown }): string {
   const agent = exec.agent as
@@ -36,4 +38,14 @@ export function sessionIdOf(exec: { agent?: unknown }): string | undefined {
     if (typeof candidate === "string" && candidate.trim() !== "") return candidate.trim();
   }
   return undefined;
+}
+
+/** 宿主 exec → core 的工具上下文。所有工具的 execute 都从这里取，别自己拼。 */
+export function contextOf(exec: { agent?: unknown; signal?: AbortSignal }): ToolRunContext {
+  const sessionId = sessionIdOf(exec);
+  return {
+    cwd: cwdOf(exec),
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(exec.signal === undefined ? {} : { signal: exec.signal }),
+  };
 }

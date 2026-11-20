@@ -14,6 +14,7 @@ import {
   type StatusToolOutput,
 } from "life-saver-core";
 import { parametersOf } from "./parameters.js";
+import { contextOf } from "./context.js";
 
 export function createStatusTool(service: LifeSaverService) {
   return defineTool({
@@ -36,7 +37,7 @@ export function createStatusTool(service: LifeSaverService) {
     },
 
     async execute(_args, exec) {
-      return runStatusTool(service, { signal: exec.signal, cwd: process.cwd() });
+      return runStatusTool(service, contextOf(exec));
     },
   });
 }

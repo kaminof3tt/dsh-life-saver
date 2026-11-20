@@ -11,14 +11,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, stat } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, resolve, join } from "node:path";
 import type { LifeSaverConfig } from "life-saver-core/config.js";
 import type { LifeSaverService } from "life-saver-core/service.js";
 import { LifeSaverError } from "life-saver-core/service.js";
 import type { EntityKind } from "life-saver-core/domain/model.js";
 import {
-  findTarget,
   kindLabel,
   matchTarget,
   normalizePath,
@@ -26,6 +24,14 @@ import {
   type TargetQuery,
   type WorkspaceTarget,
 } from "../domain/targets.js";
+import {
+  artifactDirOf,
+  artifactDirName,
+  briefTarget,
+  ensureRoot,
+  sessionTitle,
+  type BriefTarget,
+} from "life-saver-core/workspace/layout.js";
 import { syncRepos, type RepoSync } from "./git.js";
 import { lookupSession, type LookupResult, type SessionSummaryLike } from "./history.js";
 import { recordWorkStart } from "../commit/start.js";
@@ -215,7 +221,7 @@ export async function startSession(
 
   // 4. 建/复用工作区：宿主只认「已存在的目录」，重复调用会返回已有实体。
   const existing = workspaceRegistry.list().find((item) => normalizePath(item.path) === normalizePath(target.path));
-  const title = sessionTitle(target, request.kind, request.id, entity.title);
+  const title = sessionTitle(request.kind, request.id, entity.title);
   const promptText = buildPrompt(config, target, request.kind, request.id, entity.title, entity.url, sync.results);
   const brief = { title: entity.title, ...(entity.url !== undefined ? { url: entity.url } : {}) };
 
@@ -418,44 +424,6 @@ async function listSessions(
   }
 }
 
-/** 建会话前把根目录准备好：没有仓库要 clone 就要求它自己存在（不凭空造空目录）。 */
-async function ensureRoot(path: string, mayCreate: boolean): Promise<{ readonly ok: boolean; readonly message: string }> {
-  try {
-    const info = await stat(path);
-    if (info.isDirectory()) return { ok: true, message: "" };
-    return { ok: false, message: `工作区路径 ${path} 不是目录。` };
-  } catch {
-    // 不存在
-  }
-  if (!mayCreate) return { ok: false, message: `工作区目录 ${path} 不存在，而且这个目标没配可自动 clone 的仓库，不替你造空目录。` };
-  try {
-    await mkdir(path, { recursive: true });
-    return { ok: true, message: "" };
-  } catch (error) {
-    return { ok: false, message: `工作区目录 ${path} 建不出来：${messageOf(error)}` };
-  }
-}
-
-/** 会话标题：一眼能看出是哪条禅道单子。 */
-function sessionTitle(target: WorkspaceTarget, kind: EntityKind, id: number, title: string): string {
-  return `${kindLabel(kind)} #${id} ${title}`.replace(/\s+/g, " ").trim().slice(0, 80);
-}
-
-/**
- * 会话产物目录名：和会话名一致，只把文件系统不认的字符换掉。
- *
- * 会话名里带 `#`、空格、中文都是常态，Windows 只拦 `\ / : * ? " < > |` 与控制字符；
- * 末尾的点和空格在 Windows 上会被静默吞掉，一并去掉，否则提示词里写的路径和实际建出来的不是同一个。
- */
-function artifactDirName(sessionName: string): string {
-  const cleaned = sessionName
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/[\u0000-\u001f]/g, "-")
-    .replace(/[. ]+$/, "")
-    .trim();
-  return cleaned === "" ? "session" : cleaned;
-}
-
 /**
  * 首条提示词：只给「编号 + 环境事实 + 该做什么」。
  *
@@ -482,8 +450,8 @@ function buildPrompt(
   const zentao = url !== undefined ? url : `禅道 ${kindLabel(kind)} #${id}`;
   const submoduleSummary = submoduleText(repos);
   // 会话名与产物目录名同源：会话改名成 `BUG #5967 登录页报错`，产物目录就是工作区根目录下同名的那一个。
-  const sessionName = sessionTitle(target, kind, id, title);
-  const artifactDir = join(target.path, artifactDirName(sessionName));
+  const sessionName = sessionTitle(kind, id, title);
+  const artifactDir = artifactDirOf(target, sessionName);
   const custom = config.session.promptTemplate.trim();
   if (custom !== "") {
     return fill(custom, {
@@ -579,10 +547,6 @@ function fill(template: string, values: Readonly<Record<string, string>>): strin
   return template.replace(/\{\{\s*([a-z]+)\s*\}\}/gi, (whole, key: string) => values[key.toLowerCase()] ?? whole);
 }
 
-function briefTarget(target: WorkspaceTarget): { id: string; name: string; path: string } {
-  return { id: target.id, name: target.name, path: target.path };
-}
-
 function fail(code: string, message: string, dryRun: boolean): StartResult {
   return { ok: false, code, message, prompted: false, dryRun, repos: [], warnings: [] };
 }
@@ -607,4 +571,4 @@ function shortReason(message: string): string {
 }
 
 /** 直接按 id/name 找目标（页面下拉里选中后回传）。 */
-export { findTarget };
+export { findTarget } from "../domain/targets.js";

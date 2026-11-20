@@ -97,16 +97,20 @@ export {
  */
 export {
   BUGOP_SPEC,
+  COMMIT_SPEC,
   READ_SPEC,
   SEARCH_SPEC,
   STATUS_SPEC,
   TASKOP_SPEC,
   TOOL_SPECS,
   WORKHOURS_SPEC,
+  WORK_START_SPEC,
   jsonSchemaOf,
   parametersOf,
   requiredOf,
   renderBugOpOutput,
+  renderCommitToolOutput,
+  commitRequestOf,
   renderReadOutput,
   renderSearchOutput,
   renderStatusMarkdown,
@@ -115,11 +119,16 @@ export {
   renderWorkhoursOutput,
   renderWorklogReport,
   runBugOpTool,
+  runCommitTool,
   runReadTool,
   runSearchTool,
   runStatusTool,
   runTaskOpTool,
   runWorkhoursTool,
+  runWorkStartTool,
+  renderWorkStartToolOutput,
+  type CommitToolOutput,
+  type WorkStartToolOutput,
   type ReadToolOutput,
   type SearchToolOutput,
   type StatusToolOutput,
@@ -129,3 +138,5 @@ export {
   type ToolSpec,
   type WorkhoursToolOutput,
 } from "./ops/index.js";
+
+export * from "./workspace/index.js";

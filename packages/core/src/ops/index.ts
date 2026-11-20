@@ -8,11 +8,13 @@
 
 export {
   BUGOP_SPEC,
+  COMMIT_SPEC,
   READ_SPEC,
   SEARCH_SPEC,
   STATUS_SPEC,
   TASKOP_SPEC,
   TOOL_SPECS,
+  WORK_START_SPEC,
   WORKHOURS_SPEC,
   jsonSchemaOf,
   parametersOf,
@@ -22,10 +24,12 @@ export type { ToolPropertySpec, ToolPropertyType, ToolSpec } from "../specs/inde
 
 export { renderBugOpOutput, runBugOpTool } from "./bugop.js";
 export type { ToolRunContext } from "./context.js";
+export { commitRequestOf, renderCommitToolOutput, runCommitTool, type CommitToolOutput } from "./commit.js";
 export { renderReadOutput, runReadTool, type ReadToolOutput } from "./read.js";
 export { renderSearchOutput, runSearchTool, type SearchToolOutput } from "./search.js";
 export { renderStatusMarkdown, renderStatusOutput, runStatusTool, type StatusToolOutput } from "./status.js";
 export { renderTaskOpOutput, runTaskOpTool } from "./taskop.js";
+export { renderWorkStartToolOutput, runWorkStartTool, type WorkStartToolOutput } from "./work-start.js";
 export {
   renderWorkhoursOutput,
   renderWorklogReport,

@@ -12,11 +12,16 @@
 /** 参数的类型。够用即可，不追求 JSON Schema 全集。 */
 export type ToolPropertyType = "string" | "number" | "integer" | "boolean";
 
+/** 参数本身可以是标量，也可以是「同一种标量的数组」。 */
+export type ToolPropertyValueType = ToolPropertyType | "array";
+
 /** 一个参数的声明。`required` 只在为 true 时出现，方便壳直接展开。 */
 export interface ToolPropertySpec {
-  readonly type: ToolPropertyType;
+  readonly type: ToolPropertyValueType;
   readonly description: string;
   readonly enum?: readonly string[];
+  /** `type: "array"` 时元素的类型。 */
+  readonly items?: ToolPropertyType;
   readonly required?: boolean;
 }
 
@@ -41,15 +46,24 @@ export function requiredOf(spec: ToolSpec): string[] {
  */
 export function jsonSchemaOf(spec: ToolSpec): {
   type: "object";
-  properties: Record<string, { type: ToolPropertyType; description: string; enum?: string[] }>;
+  properties: Record<
+    string,
+    { type: ToolPropertyValueType; description: string; enum?: string[]; items?: { type: ToolPropertyType } }
+  >;
   required: string[];
   additionalProperties: false;
 } {
-  const properties: Record<string, { type: ToolPropertyType; description: string; enum?: string[] }> = {};
+  const properties: Record<
+    string,
+    { type: ToolPropertyValueType; description: string; enum?: string[]; items?: { type: ToolPropertyType } }
+  > = {};
   for (const [name, property] of Object.entries(spec.properties)) {
-    properties[name] = property.enum
-      ? { type: property.type, description: property.description, enum: [...property.enum] }
-      : { type: property.type, description: property.description };
+    properties[name] = {
+      type: property.type,
+      description: property.description,
+      ...(property.enum === undefined ? {} : { enum: [...property.enum] }),
+      ...(property.items === undefined ? {} : { items: { type: property.items } }),
+    };
   }
   const required = requiredOf(spec);
   return { type: "object", properties, required, additionalProperties: false };

@@ -2,7 +2,7 @@
  * `dsh-life-saver` 的插件入口。
  *
  * 挂载顺序（全部走 `ctx.inject`，服务可能晚于本插件就绪）：
- *   tools      → 注册 zentao_read / zentao_search / zentao_status / zentao_session_start 四个工具
+ *   tools      → 注册八个工具（读取 / 搜索 / 体检 / 工时 / 任务 / BUG / 提交 / 开新会话）
  *   skills     → 注册三个随包发布的禅道 skill（zentao-extract / …-scrub-trace / …-weekly-report）
  *   settings   → 关掉自动生成的设置页（我们自己画），并允许写 volatile 字段
  *   webServer  → 暴露 `/api/dsh-life-saver/*` 给设置页读写

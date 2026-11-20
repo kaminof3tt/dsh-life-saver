@@ -25,6 +25,7 @@ import {
   type WriteToolOutput,
 } from "life-saver-core";
 import { parametersOf } from "./parameters.js";
+import { contextOf } from "./context.js";
 
 export function createTaskOpTool(service: LifeSaverService) {
   return defineTool({
@@ -55,7 +56,7 @@ export function createTaskOpTool(service: LifeSaverService) {
     },
 
     async execute(rawArgs, exec) {
-      return runTaskOpTool(service, rawArgs, { signal: exec.signal, cwd: process.cwd() });
+      return runTaskOpTool(service, rawArgs, contextOf(exec));
     },
   });
 }

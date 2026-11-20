@@ -7,6 +7,7 @@
  */
 
 import type {
+  ArrayValueSchemaSpec,
   BooleanValueSchemaSpec,
   IntegerValueSchemaSpec,
   NumberValueSchemaSpec,
@@ -15,7 +16,12 @@ import type {
 } from "@deepseek-ai/dsh-tools";
 import type { ToolSpec } from "life-saver-core";
 
-type Property = StringValueSchemaSpec | NumberValueSchemaSpec | IntegerValueSchemaSpec | BooleanValueSchemaSpec;
+type Property =
+  | StringValueSchemaSpec
+  | NumberValueSchemaSpec
+  | IntegerValueSchemaSpec
+  | BooleanValueSchemaSpec
+  | ArrayValueSchemaSpec;
 
 function propertyOf(source: ToolSpec["properties"][string]): Property {
   const required = source.required === true ? { required: true as const } : {};
@@ -28,6 +34,13 @@ function propertyOf(source: ToolSpec["properties"][string]): Property {
       return { type: "integer", description: source.description, ...required };
     case "boolean":
       return { type: "boolean", description: source.description, ...required };
+    case "array":
+      return {
+        type: "array",
+        ...(source.items === undefined ? {} : { items: { type: source.items } }),
+        description: source.description,
+        ...required,
+      };
   }
 }
 

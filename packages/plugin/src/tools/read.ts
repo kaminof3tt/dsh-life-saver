@@ -16,7 +16,7 @@ import {
   type LifeSaverService,
   type ReadToolOutput,
 } from "life-saver-core";
-import { cwdOf } from "./context.js";
+import { contextOf } from "./context.js";
 import { parametersOf } from "./parameters.js";
 
 export function createReadTool(service: LifeSaverService) {
@@ -71,7 +71,7 @@ export function createReadTool(service: LifeSaverService) {
     },
 
     async execute(rawArgs, exec) {
-      return runReadTool(service, rawArgs, { signal: exec.signal, cwd: cwdOf(exec) });
+      return runReadTool(service, rawArgs, contextOf(exec));
     },
   });
 }

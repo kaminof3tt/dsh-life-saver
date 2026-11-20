@@ -9,4 +9,6 @@ export interface ToolRunContext {
   readonly signal?: AbortSignal;
   /** 工作区根目录：附件落盘与默认 outDir 的基准。 */
   readonly cwd: string;
+  /** 会话标识：commit/work_start 隔离并行任务基线用。 */
+  readonly sessionId?: string;
 }
